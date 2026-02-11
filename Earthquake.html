@@ -269,14 +269,16 @@ function loop(){
     requestAnimationFrame(loop);
 }
 
-// TOUCH
-window.addEventListener('touchstart',e=>{
-    if(e.target.closest('.btn')) return;
-    if(gameState!=='PLAYING'){gameState='PLAYING'; score=0; frame=0; gameObjects=[]; inStore=false; bgMusic.play();}
-    else if(jumpHeight===0) yVelocity=-22;
-    e.preventDefault();
-},{passive:false});
-
+if(gameState!=='PLAYING'){
+    gameState='PLAYING';
+    score=0;
+    frame=0;
+    gameObjects=[];
+    inStore=false;
+    bonusCount=0;      // ✅ RESET COMBO
+    portalActive=false; // ✅ safety reset
+    bgMusic.play();
+}
 resize(); window.addEventListener('resize',resize);
 loop();
 </script>
