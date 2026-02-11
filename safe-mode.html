@@ -29,17 +29,17 @@ body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
 <canvas id="gameCanvas"></canvas>
 
 <script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
 
 // AUDIO
-const bgMusic = new Audio('password-infinity.mp3'); bgMusic.loop=true;
-const beastModeSfx = new Audio('beast_mode.mp3'); beastModeSfx.volume=0.9;
+const bgMusic=new Audio('password-infinity.mp3'); bgMusic.loop=true;
+const beastModeSfx=new Audio('beast_mode.mp3'); beastModeSfx.volume=0.9;
 
 let isMuted=false, isPaused=false, gameState='START';
 let score=0, frame=0, gameSpeed=7, dimensionHue=0;
 let jumpHeight=0, yVelocity=0, shake=0;
-let currentZone='CYBER', beastModePlayed=false;
+let currentZone='CYBER', bonusCount=0, beastModePlayed=false;
 const gravity=1.2, GROUND_Y_OFFSET=100;
 let floorY, highScore=Number(localStorage.getItem('maxRealityHighScore'))||0;
 
@@ -48,8 +48,7 @@ const ASSETS={
     cyberBg:'gg-bg.png', snackBg:'hot-food-c-store-wp.JPG', floor:'floor.png', earthquakeBg:'pompeii-bg.png',
     azul:['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
     buildings:['building-a.png','building-b.png','building-c.png'], loriBlur:'lori-blur.png',
-    portal:'snack-portal.png',
-    rubble:'rubble.png', herc:'herc-bust.png',
+    portal:'snack-portal.png', rubble:'rubble.png', herc:'herc-bust.png',
     scroll:'scrolls.png', book:'book.png',
     pottery:['pottery.png','pottery2.png','pottery3.png','pottery4.png']
 };
@@ -77,9 +76,8 @@ class Particle{
 // LOAD IMAGES
 function load(){
     Object.keys(ASSETS).forEach(k=>{
-        if(Array.isArray(ASSETS[k])){
-            imgCache[k]=ASSETS[k].map(src=>{let i=new Image(); i.src=src; return i;});
-        } else { let i=new Image(); i.src=ASSETS[k]; imgCache[k]=i; }
+        if(Array.isArray(ASSETS[k])) imgCache[k]=ASSETS[k].map(src=>{let i=new Image(); i.src=src; return i;});
+        else { let i=new Image(); i.src=ASSETS[k]; imgCache[k]=i; }
     });
     CYBER_LOOT.forEach(src=>{ let i=new Image(); i.src=src; imgCache.loot.push(i); });
     SNACK_LOOT.forEach(src=>{ let i=new Image(); i.src=src; imgCache.loot.push(i); });
@@ -98,28 +96,37 @@ document.getElementById('pauseBtn').addEventListener('touchstart',e=>{ e.stopPro
 
 // GAME OBJECTS
 let gameObjects=[];
+let lastPortalScore=0;
+
+// SPAWN FUNCTION
 function spawn(){
-    if(currentZone==='CYBER' && frame%40===0){
-        const lootImg=imgCache.loot[Math.floor(Math.random()*CYBER_LOOT.length)];
+    // Zone-specific loot
+    let lootArray=[], particleChar='0';
+    if(currentZone==='CYBER'){ lootArray=CYBER_LOOT; particleChar=null; }
+    else if(currentZone==='SNACK'){ lootArray=SNACK_LOOT; particleChar=null; }
+    else if(currentZone==='EARTHQUAKE'){ lootArray=POMPEII_LOOT; particleChar=null; }
+    
+    // Spawn loot
+    if(frame%40===0){
+        const lootImg=imgCache.loot[Math.floor(Math.random()*lootArray.length)];
         gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'loot',img:lootImg});
     }
-    if(currentZone==='SNACK' && frame%40===0){
-        const lootImg=imgCache.loot[Math.floor(Math.random()*SNACK_LOOT.length)];
-        gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'loot',img:lootImg});
+    
+    // Spawn particles
+    if(currentZone==='CYBER'){ particles.push(new Particle(Math.random()*canvas.width,0,'#0ff',Math.random()>0.5?"1":"0",1.2)); }
+    if(currentZone==='SNACK'){ const foods=['🍞','🌭','🍩','🍗','🥤','🌮']; particles.push(new Particle(Math.random()*canvas.width,0,'#fff',foods[Math.floor(Math.random()*foods.length)],1.2)); }
+    if(currentZone==='EARTHQUAKE'){ const symbols=['🔥','💨']; particles.push(new Particle(Math.random()*canvas.width,0,'#f80',symbols[Math.floor(Math.random()*symbols.length)],1.2)); }
+    
+    // Spawn Pompeii obstacles
+    if(currentZone==='EARTHQUAKE' && frame%100===0){
+        const obsImg=imgCache.obstacles[Math.floor(Math.random()*imgCache.obstacles.length)];
+        gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'obstacle',img:obsImg});
     }
-    if(currentZone==='EARTHQUAKE'){
-        if(frame%40===0){
-            const lootImg=POMPEII_LOOT[Math.floor(Math.random()*POMPEII_LOOT.length)];
-            gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'loot',img:lootImg});
-        }
-        // Obstacles
-        if(frame%100===0){
-            const obsImg=imgCache.obstacles[Math.floor(Math.random()*imgCache.obstacles.length)];
-            gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'obstacle',img:obsImg});
-        }
-        if(frame%3===0){
-            particles.push(new Particle(Math.random()*canvas.width,0,`hsl(20,80%,${40+Math.random()*20}%)`,Math.random()>0.7?'💨':'·',1.5));
-        }
+
+    // Portal spawn every 5000 points
+    if(score>=lastPortalScore+5000){
+        gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'portal',img:imgCache.portal});
+        lastPortalScore=score;
     }
 }
 
@@ -137,13 +144,10 @@ function drawBackground(){
         drops.forEach((y,i)=>{ ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20); if(y*20>canvas.height && Math.random()>0.975) drops[i]=0; drops[i]++; });
         ctx.restore();
     }
-    else if(currentZone==='SNACK'){
-        if(imgCache.snackBg.complete){ let x=-((frame*2)%canvas.width); ctx.drawImage(imgCache.snackBg,x,0,canvas.width,canvas.height); ctx.drawImage(imgCache.snackBg,x+canvas.width,0,canvas.width,canvas.height); }
-    }
-    else if(currentZone==='EARTHQUAKE'){
-        if(imgCache.earthquakeBg.complete){ let x=-((frame*1.8)%canvas.width); ctx.drawImage(imgCache.earthquakeBg,x,0,canvas.width,canvas.height); ctx.drawImage(imgCache.earthquakeBg,x+canvas.width,0,canvas.width,canvas.height); }
+    else if(currentZone==='SNACK'){ if(imgCache.snackBg.complete){ let x=-((frame*2)%canvas.width); ctx.drawImage(imgCache.snackBg,x,0,canvas.width,canvas.height); ctx.drawImage(imgCache.snackBg,x+canvas.width,0,canvas.width,canvas.height); } }
+    else if(currentZone==='EARTHQUAKE'){ if(imgCache.earthquakeBg.complete){ let x=-((frame*1.8)%canvas.width); ctx.drawImage(imgCache.earthquakeBg,x,0,canvas.width,canvas.height); ctx.drawImage(imgCache.earthquakeBg,x+canvas.width,0,canvas.width,canvas.height); }
         ctx.save(); ctx.globalCompositeOperation='multiply'; ctx.fillStyle=`hsl(${dimensionHue+20},90%,30%)`; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.restore();
-        const grad = ctx.createRadialGradient(canvas.width/2,canvas.height/2,0,canvas.width/2,canvas.height/2,Math.hypot(canvas.width,canvas.height)/2);
+        const grad=ctx.createRadialGradient(canvas.width/2,canvas.height/2,0,canvas.width/2,canvas.height/2,Math.hypot(canvas.width,canvas.height)/2);
         grad.addColorStop(0,'rgba(0,0,0,0)'); grad.addColorStop(1,'rgba(0,0,0,0.6)');
         ctx.fillStyle=grad; ctx.fillRect(0,0,canvas.width,canvas.height);
     }
@@ -176,11 +180,24 @@ function loop(){
 
         for(let i=gameObjects.length-1;i>=0;i--){
             const obj=gameObjects[i]; obj.x-=gameSpeed;
-            if(obj.x<160 && obj.x>80 && obj.type==='loot'){
-                score+=100; dimensionHue+=5;
-                particles.push(new Particle(obj.x,obj.y,'#fff','+100'));
-                gameObjects.splice(i,1);
+
+            if(obj.x<160 && obj.x>80){
+                if(obj.type==='loot'){
+                    bonusCount++; if(bonusCount>10) bonusCount=1;
+                    const points=100*bonusCount; score+=points; dimensionHue+=5;
+                    particles.push(new Particle(obj.x,obj.y,'#fff','+'+points));
+                    gameObjects.splice(i,1);
+                }
+                else if(obj.type==='portal'){
+                    flashScreen(); 
+                    if(currentZone==='CYBER'){ currentZone='SNACK'; gameSpeed=7; }
+                    else if(currentZone==='SNACK'){ currentZone='EARTHQUAKE'; gameSpeed=12; }
+                    else { currentZone='CYBER'; gameSpeed=7; }
+                    bonusCount=0; gameObjects=[]; particles=[];
+                    if(currentZone==='EARTHQUAKE'){ beastModeSfx.play(); beastModePlayed=true; }
+                }
             }
+
             if(obj.img) ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
             if(obj.x<-100) gameObjects.splice(i,1);
         }
@@ -194,26 +211,14 @@ function loop(){
 }
 
 // TOUCH
-window.addEventListener('touchstart', e=>{
+window.addEventListener('touchstart',e=>{
     if(e.target.closest('.btn')) return;
-    if(gameState!=='PLAYING'){
-        gameState='PLAYING'; bgMusic.play();
-        if(currentZone==='EARTHQUAKE' && !beastModePlayed){ beastModeSfx.play(); beastModePlayed=true; }
-    } else if(jumpHeight===0) yVelocity=-22;
+    if(gameState!=='PLAYING'){ gameState='PLAYING'; bgMusic.play(); }
+    else if(jumpHeight===0) yVelocity=-22;
     e.preventDefault();
 },{passive:false});
 
-// PORTAL CYCLE
-setInterval(()=>{
-    if(gameState!=='PLAYING') return;
-    if(currentZone==='CYBER'){ currentZone='SNACK'; gameSpeed=7; }
-    else if(currentZone==='SNACK'){ currentZone='EARTHQUAKE'; gameSpeed=12; beastModePlayed=false; beastModeSfx.play(); beastModePlayed=true; }
-    else { currentZone='CYBER'; gameSpeed=7; beastModePlayed=false; }
-    particles=[]; gameObjects=[]; initMatrix();
-},12000);
-
-initMatrix();
-loop();
+resize(); initMatrix(); loop();
 </script>
 </body>
 </html>
