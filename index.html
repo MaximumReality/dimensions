@@ -43,7 +43,6 @@ const ctx = canvas.getContext('2d');
 
 const bgMusic = new Audio('password-infinity.mp3');
 bgMusic.loop = true;
-bgMusic.addEventListener('ended', () => { bgMusic.currentTime = 0; bgMusic.play(); });
 
 const GROUND_Y_OFFSET = 100; 
 let floorY;
@@ -57,53 +56,17 @@ const ASSETS = {
     obstacles: ['old-pc.png']
 };
 
-const TECH_GEAR = ["💻", "⌨️", "💿", "💾", "💽"];
-const MATRIX_CHARS = "0123456789ABCDEF01";
+const LOOT_ASSETS = [
+    'power-supply.png', '2tb.png', 'curve-keyboard.png', 'motherboard.png',
+    'optical-drive.png', 'core-i7.png', 'ram.png', 'cpu-water-cooler.png',
+    'ssd.png', 'core-i9.png', 'card.png', 'graphics-card.png', 'circuitpython.png'
+];
 
+const MATRIX_CHARS = "0123456789ABCDEF01";
 let gameState = 'START', score = 0, frame = 0, gameSpeed = 7;
 let jumpHeight = 0, yVelocity = 0, shake = 0, dimensionHue = 0;
-const gravity = 1.2, imgCache = {};
+const gravity = 1.2, imgCache = { loot: [] };
 
-// --- 🟢 ADDED: MATRIX ENGINE ---
-let columns;
-let drops = [];
-function initMatrix() {
-    columns = Math.floor(canvas.width / 20);
-    drops = Array(columns).fill(1);
-}
-
-function drawMatrix() {
-    ctx.save();
-    
-    // 1. Set the color to a bright, classic Matrix Green (or your dimension hue)
-    // Increased alpha to 0.8 for high visibility
-    ctx.fillStyle = `hsla(${dimensionHue + 120}, 100%, 50%, 0.8)`;
-    
-    // 2. Add a neon glow effect
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = `hsla(${dimensionHue + 120}, 100%, 50%, 1)`;
-    
-    ctx.font = "bold 18px monospace"; // Bolded and slightly larger
-    
-    for (let i = 0; i < drops.length; i++) {
-        const text = MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)];
-        
-        // Render the character
-        ctx.fillText(text, i * 20, drops[i] * 20);
-        
-        // Reset drop if it hits the floor or randomly
-        if (drops[i] * 20 > canvas.height && Math.random() > 0.975) {
-            drops[i] = 0;
-        }
-        
-        // The speed of the fall
-        drops[i]++;
-    }
-    ctx.restore();
-}
-
-
-// --- 🟢 ADDED: LOAD ENGINE ---
 function load() {
     Object.keys(ASSETS).forEach(key => {
         if (Array.isArray(ASSETS[key])) {
@@ -112,9 +75,33 @@ function load() {
             imgCache[key] = new Image(); imgCache[key].src = ASSETS[key];
         }
     });
+    // Load Loot Images
+    LOOT_ASSETS.forEach(src => {
+        let i = new Image(); i.src = src; imgCache.loot.push(i);
+    });
+}
+load();
+
+let columns, drops = [];
+function initMatrix() {
+    columns = Math.floor(canvas.width / 20);
+    drops = Array(columns).fill(1);
 }
 
-load();
+function drawMatrix() {
+    ctx.save();
+    ctx.fillStyle = `hsla(${dimensionHue + 120}, 100%, 50%, 0.8)`;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = `hsla(${dimensionHue + 120}, 100%, 50%, 1)`;
+    ctx.font = "bold 18px monospace";
+    for (let i = 0; i < drops.length; i++) {
+        const text = MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)];
+        ctx.fillText(text, i * 20, drops[i] * 20);
+        if (drops[i] * 20 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+        drops[i]++;
+    }
+    ctx.restore();
+}
 
 function resize() { 
     canvas.width = window.innerWidth; 
@@ -131,12 +118,14 @@ function spawn() {
         backgroundProps.push({ x: canvas.width + 200, y: floorY - 350, w: 220, h: 350, passed: false });
     }
     if (frame % 85 === 0) {
-        const isTech = Math.random() > 0.5;
+        const isLoot = Math.random() > 0.4;
+        const lootIdx = Math.floor(Math.random() * LOOT_ASSETS.length);
         gameObjects.push({
-            x: canvas.width + 100, y: floorY - 80, w: 90, h: 80,
-            type: isTech ? 'tech' : 'obstacle',
-            emoji: isTech ? TECH_GEAR[Math.floor(Math.random() * TECH_GEAR.length)] : null,
-            img: isTech ? null : imgCache.obstacles[0]
+            x: canvas.width + 100, 
+            y: floorY - 80, 
+            w: 80, h: 80,
+            type: isLoot ? 'tech' : 'obstacle',
+            img: isLoot ? imgCache.loot[lootIdx] : imgCache.obstacles[0]
         });
     }
 }
@@ -149,33 +138,24 @@ function triggerBSOD() {
 }
 
 function draw() {
-    // 1. THE BASE
     if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
     
-    // 2. THE BUILDINGS
-    const layers = [
-        {img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 550}, 
-        {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 450}, 
-        {img: imgCache.buildings[0], s: 3, op: 0.6, h: 350}
-    ];
+    const layers = [{img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 550}, {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 450}, {img: imgCache.buildings[0], s: 3, op: 0.6, h: 350}];
     layers.forEach(l => {
         if (l.img.complete) {
             ctx.save();
             let x = -(frame * l.s) % canvas.width;
-            ctx.globalAlpha = l.op;
-            ctx.filter = `hue-rotate(${dimensionHue}deg) brightness(1.2)`;
+            ctx.globalAlpha = l.op; ctx.filter = `hue-rotate(${dimensionHue}deg) brightness(1.2)`;
             ctx.drawImage(l.img, x, floorY - l.h, canvas.width, l.h);
             ctx.drawImage(l.img, x + canvas.width, floorY - l.h, canvas.width, l.h);
             ctx.restore();
         }
     });
 
-    // 3. THE MATRIX RAIN (Now visible over buildings!)
     ctx.globalCompositeOperation = "screen"; 
     drawMatrix();
     ctx.globalCompositeOperation = "source-over"; 
 
-    // 4. THE GHOST
     backgroundProps.forEach((p, i) => {
         p.x -= 4; 
         if (imgCache.loriBlur.complete) {
@@ -183,13 +163,10 @@ function draw() {
             ctx.drawImage(imgCache.loriBlur, p.x, p.y, p.w, p.h);
             ctx.restore();
         }
-        if (!p.passed && p.x < 150) {
-            p.passed = true; shake = 25; dimensionHue += 90;
-        }
+        if (!p.passed && p.x < 150) { p.passed = true; shake = 25; dimensionHue += 90; }
         if (p.x < -350) backgroundProps.splice(i, 1);
     });
 
-    // 5. THE FLOOR
     if (imgCache.floor.complete) {
         let fX = -(frame * gameSpeed) % 100;
         for (let i = -1; i < (canvas.width / 100) + 2; i++) {
@@ -216,16 +193,13 @@ function loop() {
 
         gameObjects.forEach((obj, i) => {
             obj.x -= gameSpeed;
-            if (obj.x < 160 && obj.x > 80 && jumpHeight < 55) {
+            if (obj.x < 160 && obj.x > 80 && jumpHeight < 60) {
                 if (obj.type === 'tech') { score += 100; gameObjects.splice(i, 1); }
                 else { triggerBSOD(); }
             }
-            if (obj.type === 'tech') {
-                ctx.font = "40px Arial";
-                ctx.fillText(obj.emoji, obj.x, obj.y + 40);
-            } else if (obj.img && obj.img.complete) {
+            if (obj.img && obj.img.complete) {
                 ctx.save();
-                if (Math.random() > 0.9) ctx.filter = "brightness(2)";
+                if (obj.type === 'obstacle' && Math.random() > 0.9) ctx.filter = "brightness(2)";
                 ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
                 ctx.restore();
             }
@@ -244,13 +218,12 @@ function loop() {
 window.addEventListener('touchstart', (e) => {
     if (gameState !== 'PLAYING') {
         gameState = 'PLAYING'; score = 0; frame = 0; gameObjects = []; backgroundProps = [];
-        dimensionHue = 0; bgMusic.play();
+        dimensionHue = 0; bgMusic.play().catch(()=>{});
     } else if (jumpHeight === 0) yVelocity = -22;
     e.preventDefault();
 }, {passive: false});
 
 loop();
 </script>
-
 </body>
 </html>
