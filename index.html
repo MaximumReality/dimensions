@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Maximum Reality Arcade</title>
+    <style>
+        :root {
+            --neon-pink: #ff00ff;
+            --neon-blue: #00ffff;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        /* The Game Stage */
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            background: url('bg_wp.JPG') no-repeat center center;
+            background-size: cover;
+            position: relative;
+        }
+
+        /* Foreground Floor */
+        #floor {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 15vh;
+            background: url('floor.png') repeat-x;
+            background-size: contain;
+            z-index: 5;
+        }
+
+        /* Lori - The Commander */
+        #lori-hero {
+            position: absolute;
+            bottom: 12vh;
+            left: 5vw;
+            height: 40vh;
+            z-index: 10;
+            filter: drop-shadow(0 0 10px var(--neon-blue));
+        }
+
+        /* Azul - The Quantum Runner */
+        #azul-runner {
+            position: absolute;
+            bottom: 12vh;
+            left: 25vw;
+            width: 80px;
+            height: 80px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            z-index: 11;
+            animation: azul-run-cycle 0.5s steps(1) infinite;
+        }
+
+        @keyframes azul-run-cycle {
+            0% { background-image: url('Azul-run.png'); }
+            33% { background-image: url('Azul-run2.png'); }
+            66% { background-image: url('Azul-run3.png'); }
+            100% { background-image: url('Azul-run.png'); }
+        }
+
+        /* Scenery Items (The Mochkil Hack) */
+        .scenery {
+            position: absolute;
+            bottom: 12vh;
+            height: 60px;
+            z-index: 4;
+            transition: transform 0.1s linear;
+        }
+
+        /* Top Banner */
+        #header-banner {
+            position: absolute;
+            top: 0;
+            width: 100%;
+            z-index: 100;
+        }
+
+        /* UI Overlays */
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: var(--neon-blue);
+            text-align: right;
+            z-index: 101;
+            text-shadow: 2px 2px #000;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <img src="Banner.PNG" id="header-banner" alt="Maximum Reality">
+    
+    <div id="ui-layer">
+        <h2 id="status">STATUS: SYSTEM ACTIVE</h2>
+        <p>HACKER: MOCHKIL</p>
+    </div>
+
+    <div id="floor"></div>
+    
+    <img src="lori-suit.png" id="lori-hero">
+
+    <div id="azul-runner"></div>
+</div>
+
+<script>
+    const container = document.getElementById('game-container');
+    const sceneryAssets = [
+        'building-a.png', 'building-b.png', 'building-c.png', 
+        'dumpster.png', 'litter-box.png', 'cardboard_tank.png',
+        'mochkil-burger.png', 'pink-donut.png', 'whiskerbytes.png'
+    ];
+
+    function spawnScenery() {
+        const item = document.createElement('img');
+        const asset = sceneryAssets[Math.floor(Math.random() * sceneryAssets.length)];
+        
+        item.src = asset;
+        item.className = 'scenery';
+        item.style.right = '-150px';
+        
+        // Randomize size slightly for depth
+        const scale = 0.8 + Math.random() * 0.5;
+        item.style.transform = `scale(${scale})`;
+        
+        container.appendChild(item);
+
+        let pos = -150;
+        const speed = 4 + Math.random() * 3; // Random speed for chaos
+
+        const move = setInterval(() => {
+            pos += speed;
+            item.style.right = pos + 'px';
+
+            if (pos > window.innerWidth + 200) {
+                clearInterval(move);
+                item.remove();
+            }
+        }, 16);
+    }
+
+    // Start the chaos
+    setInterval(spawnScenery, 1500);
+
+    // Subtle Glitch Effect on UI
+    setInterval(() => {
+        const status = document.getElementById('status');
+        status.style.color = Math.random() > 0.9 ? '#ff00ff' : '#00ffff';
+    }, 200);
+</script>
+
+</body>
+</html>
