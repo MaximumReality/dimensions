@@ -5,33 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Maximum Reality: Binary Infinity</title>
 <style>
-body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; -webkit-user-select:none; touch-action:none; }
+body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; -webkit-user-select:none; touch-action:none;}
 #gameCanvas { display:block; width:100vw; height:100vh; background:#000; }
-.ui-layer { position:absolute; top:env(safe-area-inset-top); left:20px; color:#0ff; font-family:'Courier New', monospace; z-index:100; pointer-events:none; text-shadow:0 0 8px #0ff; }
+
+.ui-layer {
+    position:absolute; top:env(safe-area-inset-top); left:20px;
+    color:#0ff; font-family:'Courier New', monospace;
+    z-index:100; pointer-events:none; text-shadow:0 0 8px #0ff;
+}
 #score { font-size:24px; font-weight:bold; }
 #highScore { font-size:14px; opacity:0.8; margin-top:5px; }
-.controls { position:absolute; top:env(safe-area-inset-top); right:20px; display:flex; gap:15px; z-index:150; }
-.btn { font-size:24px; background:rgba(0,255,255,0.15); border:1.5px solid #0ff; border-radius:8px; padding:8px; color:#0ff; cursor:pointer; backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; }
+
+.controls {
+    position:absolute; top:env(safe-area-inset-top); right:20px;
+    display:flex; gap:15px; z-index:150;
+}
+.btn {
+    font-size:24px; background:rgba(0,255,255,0.15); border:1.5px solid #0ff;
+    border-radius:8px; padding:8px; color:#0ff; cursor:pointer;
+    backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center;
+}
 .home-btn { text-decoration:none; }
-#bsod { position:fixed; top:0; left:0; width:100%; height:100%; background:#0000aa; color:#fff; font-family:'Courier New'; display:none; z-index:200; padding:50px; box-sizing:border-box; }
+
+#bsod {
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    background:#0000aa; color:#fff; font-family:'Courier New';
+    display:none; z-index:200; padding:50px; box-sizing:border-box;
+}
 </style>
 </head>
 <body>
 <div id="bsod">
-<h1>:(</h1>
-<p>CRITICAL_DIMENSION_ERROR</p>
-<p>REBOOTING SIMULATION...</p>
+    <h1>:(</h1>
+    <p>CRITICAL_DIMENSION_ERROR</p>
+    <p>REBOOTING SIMULATION...</p>
 </div>
 
 <div class="controls">
-<a href="https://MaximumReality.xyz" class="btn home-btn">🏠</a>
-<div id="muteBtn" class="btn">🔊</div>
-<div id="pauseBtn" class="btn">⏯️</div>
+    <a href="https://MaximumReality.xyz" class="btn home-btn">🏠</a>
+    <div id="muteBtn" class="btn">🔊</div>
+    <div id="pauseBtn" class="btn">⏯️</div>
 </div>
 
 <div class="ui-layer">
-<div id="score">DIMENSION: 0</div>
-<div id="highScore">BEST: 0</div>
+    <div id="score">DIMENSION: 0</div>
+    <div id="highScore">BEST: 0</div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -39,13 +57,22 @@ body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const bgMusic = new Audio('password-infinity.mp3'); bgMusic.loop = true;
+
+const bgMusic = new Audio('password-infinity.mp3');
+bgMusic.loop = true;
 
 // --- STATE ---
-let isMuted=false, isPaused=false, gameState='START', score=0, frame=0, gameSpeed=7;
-let jumpHeight=0, yVelocity=0, shake=0, dimensionHue=0, floorY;
-const gravity=1.2, GROUND_Y_OFFSET=100;
-let highScore=localStorage.getItem('maxRealityHighScore')||0;
+let isMuted = false, isPaused = false;
+let gameState = 'START', score = 0, frame = 0, gameSpeed = 7;
+let jumpHeight = 0, yVelocity = 0, shake = 0, dimensionHue = 0;
+const gravity = 1.2, GROUND_Y_OFFSET = 100;
+let floorY;
+let highScore = localStorage.getItem('maxRealityHighScore') || 0;
+let bonusCount = 0; // for multiplier
+
+let inSnackStore = false;
+const SNACK_PORTAL_POINTS = 5000;
+let nextPortalScore = SNACK_PORTAL_POINTS;
 
 // --- ASSETS ---
 const ASSETS = {
@@ -54,23 +81,37 @@ const ASSETS = {
     azul:['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
     buildings:['building-a.png','building-b.png','building-c.png'],
     loriBlur:'lori-blur.png',
-    obstacles:['old-pc.png']
+    obstacles:['old-pc.png'],
+    portal:'snack-portal.png',
+    snackStoreBG:'hot-food-c-store-wp.JPG'
 };
 
-const NORMAL_LOOT = ['power-supply.png','2tb.png','card.png','core-i7.png','curve-keyboard.png','core-i9.png','cpu-water-cooler.png','optical-drive.png','ram.png','motherboard.png','ssd.png','graphics-card.png','circuitpython.png'];
+// Loot
+const LOOT_ASSETS = ['power-supply.png','2tb.png','card.png','core-i7.png','curve-keyboard.png','core-i9.png','cpu-water-cooler.png','optical-drive.png','ram.png','motherboard.png','ssd.png','graphics-card.png','circuitpython.png'];
 const SNACK_LOOT = ['bread-slice.png','chips.png','hotdog.png','pink-donut.png','roast-chicken.png','soda.png','taco.png','mochkil-burger.png','mochkil_puffs_orange.png','azulo_blueberry_vanilla.jpg'];
 
-const imgCache={loot:[]};
+// --- IMAGE CACHE ---
+const imgCache = {loot:[]};
+function loadAssets(){
+    Object.keys(ASSETS).forEach(k=>{
+        if(Array.isArray(ASSETS[k])) imgCache[k] = ASSETS[k].map(s=>{let i=new Image();i.src=s;return i;});
+        else {imgCache[k] = new Image(); imgCache[k].src = ASSETS[k];}
+    });
+    LOOT_ASSETS.forEach(s=>{let i=new Image();i.src=s; imgCache.loot.push(i);});
+    SNACK_LOOT.forEach(s=>{let i=new Image();i.src=s; imgCache.loot.push(i);}); // temp slot
+}
 
 // --- PARTICLES ---
-let particles=[];
-class Particle {
+let particles = [];
+class Particle{
     constructor(x,y,color,text=null){
-        this.x=x; this.y=y; this.char=text||((Math.random()>0.5)?"1":"0");
+        this.x=x; this.y=y;
+        this.char=text|| (Math.random()>0.5?"0":"1");
         this.size=text?28:Math.random()*10+12;
         this.speedX=(Math.random()-0.5)*10;
         this.speedY=(Math.random()-0.5)*10;
-        this.color=color; this.life=1;
+        this.color=color;
+        this.life=1.0;
     }
     update(){ this.x+=this.speedX; this.y+=this.speedY; this.life-=0.02; }
     draw(){ ctx.save(); ctx.fillStyle=this.color; ctx.globalAlpha=this.life; ctx.font=`bold ${this.size}px monospace`; ctx.fillText(this.char,this.x,this.y); ctx.restore(); }
@@ -78,65 +119,52 @@ class Particle {
 
 // --- MATRIX RAIN ---
 let drops=[];
-function initMatrix(){ drops=Array(Math.floor(canvas.width/20)).fill(1); }
-
-// --- GAME OBJECTS ---
-let gameObjects=[], backgroundProps=[], portalActive=false, portalNextScore=5000, inAir=false, bonusCount=0;
-
-// --- LOAD ASSETS ---
-function load(){
-    Object.keys(ASSETS).forEach(k=>{
-        if(Array.isArray(ASSETS[k])) imgCache[k]=ASSETS[k].map(s=>{let i=new Image();i.src=s;return i;});
-        else{imgCache[k]=new Image();imgCache[k].src=ASSETS[k];}
-    });
-    NORMAL_LOOT.forEach(s=>{let i=new Image();i.src=s; imgCache.loot.push(i);});
-}
-load();
+function initMatrix(){ drops=Array(Math.floor(canvas.width/20)).fill(1);}
+let rainHue=0;
 
 // --- RESIZE ---
-function resize(){
-    canvas.width=window.innerWidth; canvas.height=window.innerHeight;
-    floorY=canvas.height-GROUND_Y_OFFSET;
-    initMatrix();
-}
+function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; floorY=canvas.height-GROUND_Y_OFFSET; initMatrix();}
 window.addEventListener('resize',resize);
-resize();
 
-// --- CONTROLS ---
-document.getElementById('muteBtn').addEventListener('touchstart',e=>{ e.stopPropagation(); isMuted=!isMuted; bgMusic.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊'; },{passive:false});
-document.getElementById('pauseBtn').addEventListener('touchstart',e=>{ e.stopPropagation(); isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff'; },{passive:false});
+// --- UI ---
+document.getElementById('muteBtn').addEventListener('touchstart',e=>{e.stopPropagation(); isMuted=!isMuted; bgMusic.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊';},{passive:false});
+document.getElementById('pauseBtn').addEventListener('touchstart',e=>{e.stopPropagation(); isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff';},{passive:false});
 
 // --- BSOD ---
 function triggerBSOD(){
     gameState='GAMEOVER'; bgMusic.pause();
-    if(score>highScore){highScore=score; localStorage.setItem('maxRealityHighScore',highScore);}
+    if(score>highScore){ highScore=score; localStorage.setItem('maxRealityHighScore',highScore);}
     document.getElementById('bsod').style.display='block';
     setTimeout(()=>{document.getElementById('bsod').style.display='none'; gameState='START';},2000);
 }
 
-// --- SPAWN ---
+// --- GAME OBJECTS ---
+let gameObjects=[], backgroundProps=[];
 function spawn(){
-    if(portalActive){ // SNACK STORE
-        if(frame%50===0){
-            const lootImg=imgCache.loot[Math.floor(Math.random()*SNACK_LOOT.length)];
-            gameObjects.push({x:canvas.width+50, y:floorY-80, w:70, h:70, type:'tech', img:lootImg, multiplier:bonusCount+1});
-        }
-    } else { // NORMAL WORLD
-        if(frame%85===0){
-            const isLoot=Math.random()>0.4;
-            const lootImg=isLoot?imgCache.loot[Math.floor(Math.random()*NORMAL_LOOT.length)]:imgCache.obstacles[0];
-            gameObjects.push({x:canvas.width+100,y:floorY-90,w:80,h:80,type:isLoot?'tech':'obstacle',img:lootImg,multiplier:bonusCount+1});
-        }
+    const lootList=inSnackStore?SNACK_LOOT:LOOT_ASSETS;
+    if(frame%85===0 && !inSnackStore){
+        const isLoot=Math.random()>0.4;
+        gameObjects.push({
+            x:canvas.width+100, y:floorY-90, w:80, h:80,
+            type:isLoot?'tech':'obstacle',
+            img:isLoot?imgCache.loot[Math.floor(Math.random()*LOOT_ASSETS.length)]:imgCache.obstacles[0]
+        });
+    } else if(frame%85===0 && inSnackStore){
+        gameObjects.push({
+            x:canvas.width+100, y:floorY-90, w:80, h:80,
+            type:'tech', img:imgCache.loot[Math.floor(Math.random()*SNACK_LOOT.length)]
+        });
     }
 }
 
-// --- DRAW ---
+// --- BACKGROUND ---
 function drawBackground(){
-    // 1. Static bg
-    if(imgCache.bg.complete) ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
+    // 1. BG
+    if(!inSnackStore && imgCache.bg.complete) ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
+    if(inSnackStore && imgCache.snackStoreBG.complete) ctx.drawImage(imgCache.snackStoreBG,0,0,canvas.width,canvas.height);
 
-    // 2. Lori blur (parallax visual)
-    if(imgCache.loriBlur.complete){
+    // 2. Lori Blur
+    if(!inSnackStore && imgCache.loriBlur.complete){
         ctx.save(); ctx.globalAlpha=0.4;
         let lX=-(frame*0.5)%canvas.width;
         ctx.drawImage(imgCache.loriBlur,lX,0,canvas.width,canvas.height);
@@ -145,17 +173,30 @@ function drawBackground(){
     }
 
     // 3. Buildings
-    const layers=[{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
-    layers.forEach(l=>{
-        if(l.img.complete){ctx.save();let x=-(frame*l.s)%canvas.width;ctx.globalAlpha=l.op;ctx.filter=`hue-rotate(${dimensionHue}deg)`;ctx.drawImage(l.img,x,floorY-l.h,canvas.width,l.h);ctx.drawImage(l.img,x+canvas.width,floorY-l.h,canvas.width,l.h);ctx.restore();}
-    });
+    if(!inSnackStore){
+        const layers=[{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
+        layers.forEach(l=>{
+            if(l.img.complete){
+                ctx.save(); let x=-(frame*l.s)%canvas.width;
+                ctx.globalAlpha=l.op; ctx.filter=`hue-rotate(${dimensionHue}deg)`;
+                ctx.drawImage(l.img,x,floorY-l.h,canvas.width,l.h);
+                ctx.drawImage(l.img,x+canvas.width,floorY-l.h,canvas.width,l.h);
+                ctx.restore();
+            }
+        });
 
-    // 4. Matrix Rain
-    ctx.save(); ctx.fillStyle=`hsla(${dimensionHue},100%,50%,0.8)`; ctx.font="bold 18px monospace";
-    drops.forEach((y,i)=>{ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20); if(y*20>canvas.height&&Math.random()>0.975)drops[i]=0; drops[i]++;});
-    ctx.restore();
+        // 4. Matrix Rain
+        ctx.save(); ctx.fillStyle=`hsla(${rainHue},100%,50%,0.8)`; ctx.font="bold 18px monospace";
+        drops.forEach((y,i)=>{
+            ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20);
+            if(y*20>canvas.height && Math.random()>0.975) drops[i]=0;
+            drops[i]++;
+        });
+        ctx.restore();
+        rainHue=(rainHue+0.5)%360;
+    }
 
-    // 5. Ground (solid color)
+    // 5. Floor
     ctx.fillStyle="#111"; ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET);
 }
 
@@ -163,38 +204,40 @@ function drawBackground(){
 function loop(){
     if(isPaused){requestAnimationFrame(loop); return;}
     ctx.save();
-    if(shake>0){ctx.translate(Math.random()*shake,Math.random()*shake); shake*=0.7;} // brief glitch
+    if(shake>0){ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake); shake*=0.7;}
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
     drawBackground();
 
-    // particles
-    particles.forEach((p,i)=>{p.update();p.draw();if(p.life<=0)particles.splice(i,1);});
+    particles.forEach((p,i)=>{p.update();p.draw(); if(p.life<=0) particles.splice(i,1);});
 
     if(gameState==='PLAYING'){
         frame++; spawn();
-
-        const wasInAir=inAir;
-        inAir=(jumpHeight>0);
-
-        // --- JUMP PHYSICS ---
         jumpHeight-=yVelocity; yVelocity+=gravity;
-        if(jumpHeight<=0){jumpHeight=0; yVelocity=0; if(wasInAir) shake=15;} // LANDING triggers glitch
 
-        // --- PLAYER ---
+        // Landing glitch
+        if(jumpHeight<=0 && yVelocity>0){shake=8;}
+        if(jumpHeight<=0){jumpHeight=0;yVelocity=0;}
+
+        // Azul animation
         const aFrame=Math.floor(frame/6)%4;
         ctx.drawImage(imgCache.azul[aFrame],100,floorY-110-jumpHeight,90,115);
 
-        // --- GAME OBJECTS ---
+        // --- Game objects ---
         gameObjects.forEach((obj,i)=>{
             obj.x-=gameSpeed;
-            if(obj.x<160&&obj.x>80&&jumpHeight<70){
+            if(obj.x<160 && obj.x>80 && jumpHeight<70){
                 if(obj.type==='tech'){
-                    const multiplier=bonusCount<10?bonusCount+1:1;
-                    const points=100*multiplier;
-                    score+=points; bonusCount=(bonusCount<10)?bonusCount+1:1; dimensionHue+=5;
-                    particles.push(new Particle(obj.x,obj.y,"#0ff",`+${points}`));
-                    shake=5; // tiny impact
+                    // Bonus multiplier
+                    bonusCount++;
+                    let multiplier = bonusCount<=10?bonusCount:1;
+                    score+=100*multiplier;
+                    // Particle juice + floating score
+                    const color=`hsla(${rainHue},100%,50%,1)`;
+                    for(let j=0;j<12;j++) particles.push(new Particle(obj.x,obj.y,color));
+                    particles.push(new Particle(obj.x,obj.y,color,'+'+100*multiplier));
+                    // reset bonus after 10
+                    if(bonusCount>=10) bonusCount=0;
                     gameObjects.splice(i,1);
                 } else { triggerBSOD(); }
             }
@@ -202,15 +245,21 @@ function loop(){
             if(obj.x<-100) gameObjects.splice(i,1);
         });
 
-        // --- PORTAL LOGIC ---
-        if(!portalActive && score>=portalNextScore){
-            portalActive=true; dimensionHue+=180;
-            // flash white
-            ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
-            setTimeout(()=>{portalActive=false; portalNextScore+=5000; bonusCount=0;},100);
+        // Snack portal
+        if(score>=nextPortalScore && !inSnackStore && imgCache.portal.complete){
+            ctx.drawImage(imgCache.portal,canvas.width-300,floorY-200,200,200);
         }
 
-        // --- UI ---
+        // Go through portal
+        if(!inSnackStore && score>=nextPortalScore && 100<canvas.width/2){ // simplified touch/collision for demo
+            inSnackStore=true;
+            nextPortalScore+=SNACK_PORTAL_POINTS;
+            shake=15;
+            // Bright flash
+            ctx.fillStyle='white'; ctx.fillRect(0,0,canvas.width,canvas.height);
+            gameObjects=[]; // clear objects
+        }
+
         document.getElementById('score').innerText=`DIMENSION: ${score}`;
         document.getElementById('highScore').innerText=`BEST: ${highScore}`;
 
@@ -226,12 +275,12 @@ function loop(){
 // --- TOUCH ---
 window.addEventListener('touchstart',e=>{
     if(e.target.closest('.btn')) return;
-    if(gameState!=='PLAYING'){gameState='PLAYING'; score=0; frame=0; gameObjects=[]; bgMusic.play().catch(()=>{});}
-    else if(jumpHeight===0)yVelocity=-22;
+    if(gameState!=='PLAYING'){gameState='PLAYING'; score=0; frame=0; gameObjects=[]; bonusCount=0; inSnackStore=false; bgMusic.play().catch(()=>{});}
+    else if(jumpHeight===0) yVelocity=-22;
     e.preventDefault();
 },{passive:false});
 
-loop();
+loadAssets(); resize(); window.addEventListener('resize',resize); loop();
 </script>
 </body>
 </html>
