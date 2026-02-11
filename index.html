@@ -74,21 +74,34 @@ function initMatrix() {
 
 function drawMatrix() {
     ctx.save();
-    // Subtle glow that matches the dimension shift
-    ctx.fillStyle = `hsla(${dimensionHue + 120}, 100%, 50%, 0.25)`;
-    ctx.font = "15px monospace";
+    
+    // 1. Set the color to a bright, classic Matrix Green (or your dimension hue)
+    // Increased alpha to 0.8 for high visibility
+    ctx.fillStyle = `hsla(${dimensionHue + 120}, 100%, 50%, 0.8)`;
+    
+    // 2. Add a neon glow effect
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = `hsla(${dimensionHue + 120}, 100%, 50%, 1)`;
+    
+    ctx.font = "bold 18px monospace"; // Bolded and slightly larger
     
     for (let i = 0; i < drops.length; i++) {
         const text = MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)];
+        
+        // Render the character
         ctx.fillText(text, i * 20, drops[i] * 20);
         
+        // Reset drop if it hits the floor or randomly
         if (drops[i] * 20 > canvas.height && Math.random() > 0.975) {
             drops[i] = 0;
         }
+        
+        // The speed of the fall
         drops[i]++;
     }
     ctx.restore();
 }
+
 
 // --- 🟢 ADDED: LOAD ENGINE ---
 function load() {
