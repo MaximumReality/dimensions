@@ -51,7 +51,6 @@ const GROUND_Y_OFFSET = 100;
 let floorY;
 let highScore = localStorage.getItem('maxRealityHighScore') || 0;
 
-// --- ASSET LISTS ---
 const ASSETS = {
     bg: 'gg-bg.png',
     snackBG: 'hot-food-c-store-wp.JPG',
@@ -73,9 +72,8 @@ const LOOT_SNACKS = [
     'taco.png', 'soda.png', 'hotdog.png', 'roast-chicken.png', 'chips.png', 'pink-donut.png'
 ];
 
-// --- GAME STATE ---
 let gameState = 'START', currentZone = 'CYBER'; 
-let score = 0, frame = 0, gameSpeed = 7;
+let score = 0, frame = 0, gameSpeed = 7, snackX = 0;
 let jumpHeight = 0, yVelocity = 0, shake = 0, dimensionHue = 0;
 const gravity = 1.2, imgCache = { loot: [], snacks: [] };
 let particles = [], gameObjects = [], backgroundProps = [];
@@ -145,11 +143,12 @@ function toggleZone() {
         currentZone = 'CYBER'; gameSpeed = 7;
         document.getElementById('status').innerText = "RE-ENTERING MATRIX...";
     }
+    gameObjects = []; // Clear for smooth transition
 }
 
 function spawn() {
-    // Portal spawn every 1000 points
-    if (score > 0 && score % 1000 === 0 && !gameObjects.some(o => o.type === 'portal')) {
+    const milestone = Math.floor(score / 1000) * 1000;
+    if (score > 0 && score === milestone && !gameObjects.some(o => o.type === 'portal')) {
         gameObjects.push({ x: canvas.width + 100, y: floorY - 140, w: 120, h: 140, type: 'portal', img: imgCache.portal });
     }
     
@@ -177,12 +176,8 @@ function triggerBSOD() {
 }
 
 function draw() {
-    // Background Swap
-    let activeBG = (currentZone === 'CYBER') ? imgCache.bg : imgCache.snackBG;
-    if (activeBG.complete) ctx.drawImage(activeBG, 0, 0, canvas.width, canvas.height);
-
     if (currentZone === 'CYBER') {
-        // Parallax City
+        if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
         const layers = [{img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 550}, {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 450}, {img: imgCache.buildings[0], s: 3, op: 0.6, h: 350}];
         layers.forEach(l => {
             if (l.img.complete) {
@@ -195,7 +190,12 @@ function draw() {
         });
         ctx.globalCompositeOperation = "screen"; drawMatrix(); ctx.globalCompositeOperation = "source-over";
     } else {
-        // Snack Attack Glare
+        if (imgCache.snackBG.complete) {
+            snackX -= (gameSpeed * 0.5);
+            if (snackX <= -canvas.width) snackX = 0;
+            ctx.drawImage(imgCache.snackBG, snackX, 0, canvas.width, canvas.height);
+            ctx.drawImage(imgCache.snackBG, snackX + canvas.width, 0, canvas.width, canvas.height);
+        }
         ctx.fillStyle = "rgba(255, 255, 200, 0.15)"; ctx.fillRect(0,0, canvas.width, canvas.height);
     }
 
@@ -236,8 +236,6 @@ function loop() {
 
         gameObjects.forEach((obj, i) => {
             obj.x -= gameSpeed;
-            
-            // Collision Logic
             if (obj.x < 160 && obj.x > 80 && jumpHeight < (obj.type === 'tech' ? 95 : 65)) {
                 if (obj.type === 'portal') {
                     toggleZone(); gameObjects.splice(i, 1);
@@ -259,8 +257,6 @@ function loop() {
         
         document.getElementById('score').innerText = `DIMENSION: ${score}`;
         document.getElementById('highScore').innerText = `BEST: ${highScore}`;
-        if (score > highScore && highScore > 0) document.getElementById('score').classList.add('new-record');
-
     } else {
         ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,canvas.width, canvas.height);
         ctx.fillStyle = "#0ff"; ctx.textAlign = "center"; ctx.font = "18px Courier";
