@@ -13,32 +13,29 @@ body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
 #highScore { font-size:14px; opacity:0.8; margin-top:5px; }
 
 .controls { position:absolute; top:env(safe-area-inset-top); right:20px; display:flex; gap:15px; z-index:150; }
-.btn { font-size:24px; background:rgba(0,255,255,0.15); border:1.5px solid #0ff; border-radius:8px; padding:8px; color:#0ff; cursor:pointer; backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; }
+.btn { font-size:24px; background: rgba(0,255,255,0.15); border:1.5px solid #0ff; border-radius:8px; padding:8px; color:#0ff; cursor:pointer; backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; }
 .home-btn { text-decoration:none; }
 
-#bsod { position:fixed; top:0; left:0; width:100%; height:100%; background:#0000aa; color:#fff; font-family:'Courier New'; display:none; z-index:200; padding:50px; box-sizing:border-box; }
-#flash { position:fixed; top:0; left:0; width:100%; height:100%; background:#fff; display:none; z-index:250; }
+#bsod { position:fixed; top:0; left:0; width:100%; height:100%; background:#0000aa; color:#fff; font-family:'Courier New'; display:none; z-index:200; padding:50px; box-sizing:border-box; text-align:center; }
 </style>
 </head>
 <body>
 
 <div id="bsod">
-    <h1>:(</h1>
-    <p>CRITICAL_DIMENSION_ERROR</p>
-    <p>REBOOTING SIMULATION...</p>
+<h1>:(</h1>
+<p>CRITICAL_DIMENSION_ERROR</p>
+<p>REBOOTING SIMULATION...</p>
 </div>
 
-<div id="flash"></div>
-
 <div class="controls">
-    <a href="https://MaximumReality.xyz" class="btn home-btn">🏠</a>
-    <div id="muteBtn" class="btn">🔊</div>
-    <div id="pauseBtn" class="btn">⏯️</div>
+<a href="https://MaximumReality.xyz" class="btn home-btn">🏠</a>
+<div id="muteBtn" class="btn">🔊</div>
+<div id="pauseBtn" class="btn">⏯️</div>
 </div>
 
 <div class="ui-layer">
-    <div id="score">DIMENSION: 0</div>
-    <div id="highScore">BEST: 0</div>
+<div id="score">DIMENSION: 0</div>
+<div id="highScore">BEST: 0</div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -46,194 +43,156 @@ body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const bgMusic = new Audio('password-infinity.mp3');
-bgMusic.loop = true;
+const bgMusic = new Audio('password-infinity.mp3'); bgMusic.loop = true;
 
-let isMuted=false, isPaused=false;
-let gameState='START', score=0, frame=0, gameSpeed=7;
-let jumpHeight=0, yVelocity=0, shake=0, dimensionHue=0;
-let portalActive=false, portalCollected=false;
+let isMuted=false, isPaused=false, gameState='START', score=0, frame=0, gameSpeed=7;
+let jumpHeight=0, yVelocity=0, shake=0, dimensionHue=0, floorY;
 const gravity=1.2, GROUND_Y_OFFSET=100;
-let floorY, highScore=localStorage.getItem('maxRealityHighScore')||0;
+let highScore = localStorage.getItem('maxRealityHighScore')||0;
 
 const ASSETS = {
-    bg:'gg-bg.png',
-    floor:'floor.png',
-    azul:['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
-    buildings:['building-a.png','building-b.png','building-c.png'],
-    loriBlur:'lori-blur.png',
-    obstacles:['old-pc.png'],
-    portal:'snack-portal.png',
-    hotFoodBG:'hot-food-c-store-wp.JPG'
+  bg: 'gg-bg.png',
+  floor: 'floor.png',
+  azul: ['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
+  buildings: ['building-a.png','building-b.png','building-c.png'],
+  loriBlur: 'lori-blur.png',
+  obstacles: ['old-pc.png'],
+  snackPortal: 'snack-portal.png',
+  hotFoodWP: 'hot-food-c-store-wp.JPG'
 };
-const LOOT_ASSETS = ['power-supply.png','2tb.png','curve-keyboard.png','motherboard.png','ssd.png','graphics-card.png','circuitpython.png'];
-const imgCache = { loot: [] };
 
-// PARTICLES
-let particles=[];
-class Particle{
-    constructor(x,y,color,text=null){
-        this.x=x; this.y=y;
-        this.char=text|| (Math.random()>0.5?"1":"0");
-        this.size=text?28:Math.random()*10+12;
-        this.speedX=(Math.random()-0.5)*10;
-        this.speedY=(Math.random()-0.5)*10;
-        this.color=color; this.life=1.0;
-    }
-    update(){ this.x+=this.speedX; this.y+=this.speedY; this.life-=0.02; }
-    draw(){ ctx.save(); ctx.fillStyle=this.color; ctx.globalAlpha=this.life; ctx.font=`bold ${this.size}px monospace`; ctx.fillText(this.char,this.x,this.y); ctx.restore(); }
+const LOOT_ASSETS=['power-supply.png','2tb.png','curve-keyboard.png','motherboard.png','ssd.png','graphics-card.png','circuitpython.png'];
+
+const imgCache={loot:[]};
+let particles=[], bonusParticles=[];
+let bonusCount=0, MAX_BONUS=10;
+let drops=[], portalActive=false;
+
+function load() {
+  Object.keys(ASSETS).forEach(k=>{
+    if(Array.isArray(ASSETS[k])) imgCache[k]=ASSETS[k].map(s=>{let i=new Image(); i.src=s; return i;});
+    else { imgCache[k]=new Image(); imgCache[k].src=ASSETS[k]; }
+  });
+  LOOT_ASSETS.forEach(s=>{ let i=new Image(); i.src=s; imgCache.loot.push(i); });
 }
 
-// MATRIX RAIN
-let drops=[];
-
-function load(){
-    Object.keys(ASSETS).forEach(k=>{
-        if(Array.isArray(ASSETS[k])) imgCache[k]=ASSETS[k].map(s=>{let i=new Image(); i.src=s; return i;});
-        else { imgCache[k]=new Image(); imgCache[k].src=ASSETS[k]; }
-    });
-    LOOT_ASSETS.forEach(s=>{let i=new Image(); i.src=s; imgCache.loot.push(i);});
+class Particle {
+  constructor(x,y,color,text=null){
+    this.x=x; this.y=y; this.char=text||Math.random()>0.5?"0":"1";
+    this.size=text?28:Math.random()*10+12;
+    this.speedX=(Math.random()-0.5)*10;
+    this.speedY=(Math.random()-0.5)*10;
+    this.color=color; this.life=1.0;
+  }
+  update(){ this.x+=this.speedX; this.y+=this.speedY; this.life-=0.02; }
+  draw(){ ctx.save(); ctx.fillStyle=this.color; ctx.globalAlpha=this.life; ctx.font=`bold ${this.size}px monospace`; ctx.fillText(this.char,this.x,this.y); ctx.restore(); }
 }
 
-function resize(){ 
-    canvas.width=window.innerWidth; canvas.height=window.innerHeight;
-    floorY=canvas.height-GROUND_Y_OFFSET;
-    drops=Array(Math.floor(canvas.width/20)).fill(1);
-}
+let gameObjects=[], bgColorCycle=0;
 
-// UI HANDLERS
-document.getElementById('muteBtn').addEventListener('touchstart',e=>{e.stopPropagation(); isMuted=!isMuted; bgMusic.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊';},{passive:false});
-document.getElementById('pauseBtn').addEventListener('touchstart',e=>{e.stopPropagation(); isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff';},{passive:false});
+// UI buttons
+document.getElementById('muteBtn').addEventListener('touchstart', e=>{ e.stopPropagation(); isMuted=!isMuted; bgMusic.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊'; }, {passive:false});
+document.getElementById('pauseBtn').addEventListener('touchstart', e=>{ e.stopPropagation(); isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff'; }, {passive:false});
 
-function triggerBSOD(){ 
-    gameState='GAMEOVER'; bgMusic.pause();
-    if(score>highScore){ highScore=score; localStorage.setItem('maxRealityHighScore',highScore);}
-    document.getElementById('bsod').style.display='block';
-    setTimeout(()=>{ document.getElementById('bsod').style.display='none'; gameState='START';},2000);
-}
+function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; floorY=canvas.height-GROUND_Y_OFFSET; initMatrix(); }
+function initMatrix(){ const cols=Math.floor(canvas.width/20); drops=Array(cols).fill(1); }
 
-// GAME OBJECTS
-let gameObjects=[], backgroundProps=[];
+function triggerBSOD(){ gameState='GAMEOVER'; bgMusic.pause(); if(score>highScore){highScore=score; localStorage.setItem('maxRealityHighScore',highScore);}
+document.getElementById('bsod').style.display='block'; setTimeout(()=>{document.getElementById('bsod').style.display='none'; gameState='START';},2000); }
 
-// SPAWN OBJECTS
 function spawn(){
-    // Portal every 5000 pts
-    if(score>0 && score%5000===0 && !portalActive && !portalCollected){
-        portalActive=true;
-        gameObjects.push({x:canvas.width, y:floorY-120, w:100, h:140, type:'portal', img:imgCache.portal});
-    }
-
-    if(frame%85===0){
-        const isLoot=Math.random()>0.4;
-        gameObjects.push({
-            x:canvas.width+100, y:floorY-90, w:80, h:80,
-            type:isLoot?'tech':'obstacle',
-            img:isLoot?imgCache.loot[Math.floor(Math.random()*imgCache.loot.length)]:imgCache.obstacles[0]
-        });
-    }
+  if(frame%85===0){
+    const isLoot=Math.random()>0.4;
+    gameObjects.push({
+      x:canvas.width+100, y:floorY-90, w:80, h:80,
+      type:isLoot?'tech':'obstacle',
+      img:isLoot?imgCache.loot[Math.floor(Math.random()*imgCache.loot.length)]:imgCache.obstacles[0]
+    });
+  }
 }
 
-// BACKGROUND DRAW
 function drawBackground(){
-    // 1. Normal BG or Hot Food BG if portal collected
-    if(portalCollected && imgCache.hotFoodBG.complete) ctx.drawImage(imgCache.hotFoodBG,0,0,canvas.width,canvas.height);
-    else if(imgCache.bg.complete) ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
+  // wallpaper
+  if(portalActive && imgCache.hotFoodWP.complete) ctx.drawImage(imgCache.hotFoodWP,0,0,canvas.width,canvas.height);
+  else if(imgCache.bg.complete) ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
+  
+  // lori blur visual only
+  if(imgCache.loriBlur.complete){ ctx.save(); ctx.globalAlpha=0.4; let lX=-(frame*0.5)%canvas.width; ctx.drawImage(imgCache.loriBlur,lX,0,canvas.width,canvas.height); ctx.drawImage(imgCache.loriBlur,lX+canvas.width,0,canvas.width,canvas.height); ctx.restore(); }
 
-    // 2. loriBlur as visual
-    if(imgCache.loriBlur.complete){ctx.save(); ctx.globalAlpha=0.4;
-        let lX=-(frame*0.5)%canvas.width;
-        ctx.drawImage(imgCache.loriBlur,lX,0,canvas.width,canvas.height);
-        ctx.drawImage(imgCache.loriBlur,lX+canvas.width,0,canvas.width,canvas.height);
-        ctx.restore();
-    }
+  // buildings
+  const layers=[{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
+  layers.forEach(l=>{ if(l.img.complete){ ctx.save(); let x=-(frame*l.s)%canvas.width; ctx.globalAlpha=l.op; ctx.filter=`hue-rotate(${dimensionHue}deg)`; ctx.drawImage(l.img,x,floorY-l.h,canvas.width,l.h); ctx.drawImage(l.img,x+canvas.width,floorY-l.h,canvas.width,l.h); ctx.restore(); } });
 
-    // 3. Buildings
-    const layers=[{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
-    layers.forEach(l=>{if(l.img.complete){ctx.save();let x=-(frame*l.s)%canvas.width; ctx.globalAlpha=l.op; ctx.filter=`hue-rotate(${dimensionHue}deg)`; ctx.drawImage(l.img,x,floorY-l.h,canvas.width,l.h); ctx.drawImage(l.img,x+canvas.width,floorY-l.h,canvas.width,l.h); ctx.restore();}});
+  // matrix rain cycling color
+  bgColorCycle=(bgColorCycle+0.5)%360; ctx.save(); ctx.fillStyle=`hsla(${bgColorCycle},100%,50%,0.8)`; ctx.font="bold 18px monospace";
+  drops.forEach((y,i)=>{ ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20); if(y*20>canvas.height&&Math.random()>0.975)drops[i]=0; drops[i]++; });
+  ctx.restore();
 
-    // 4. Matrix rain, cycling hue
-    ctx.save(); ctx.font="bold 18px monospace";
-    drops.forEach((y,i)=>{
-        ctx.fillStyle=`hsl(${dimensionHue},100%,50%)`;
-        ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20);
-        if(y*20>canvas.height && Math.random()>0.975) drops[i]=0;
-        drops[i]++;
-    }); ctx.restore();
+  // floor
+  ctx.fillStyle="#111"; ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET);
+}
 
-    // 5. Solid ground
-    ctx.fillStyle="#222"; ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET);
+function collectTech(obj){
+  bonusCount=Math.min(bonusCount+1,MAX_BONUS);
+  const bonus=100*Math.pow(2,bonusCount-1); score+=bonus; dimensionHue=(dimensionHue+15)%360;
+
+  // particles
+  for(let j=0;j<12;j++) particles.push(new Particle(obj.x,obj.y,`hsl(${dimensionHue},100%,50%)`));
+  bonusParticles.push({x:obj.x,y:obj.y,text:`+${bonus}`,color:`hsl(${dimensionHue},100%,50%)`});
 }
 
 function loop(){
-    if(isPaused){requestAnimationFrame(loop); return;}
-    ctx.save();
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+  if(isPaused){ requestAnimationFrame(loop); return; }
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawBackground();
 
-    drawBackground();
+  particles.forEach((p,i)=>{ p.update(); p.draw(); if(p.life<=0)particles.splice(i,1); });
 
-    // particles
-    particles.forEach((p,i)=>{p.update();p.draw();if(p.life<=0)particles.splice(i,1);});
+  // floating bonus text
+  bonusParticles.forEach((b,i)=>{ b.y-=1.5; ctx.save(); ctx.fillStyle=b.color; ctx.font="bold 28px monospace"; ctx.fillText(b.text,b.x,b.y); ctx.restore(); if(b.y<0)bonusParticles.splice(i,1); });
 
-    if(gameState==='PLAYING'){
-        frame++; spawn();
-        jumpHeight-=yVelocity; yVelocity+=gravity;
-        let landed=false;
-        if(jumpHeight<=0){jumpHeight=0; yVelocity=0; landed=true;}
+  if(gameState==='PLAYING'){
+    frame++; spawn(); jumpHeight-=yVelocity; yVelocity+=gravity;
+    if(jumpHeight<=0){ if(yVelocity>0)shake=15; jumpHeight=0; yVelocity=0; }
 
-        // Azul animation
-        const aFrame=Math.floor(frame/6)%4;
-        ctx.drawImage(imgCache.azul[aFrame],100,floorY-110-jumpHeight,90,115);
+    const aFrame=Math.floor(frame/6)%4; ctx.drawImage(imgCache.azul[aFrame],100,floorY-110-jumpHeight,90,115);
 
-        // game objects
-        gameObjects.forEach((obj,i)=>{
-            obj.x-=gameSpeed;
-            if(obj.type==='tech' && obj.x<160 && obj.x>80 && jumpHeight<70){
-                score+=100; dimensionHue=(dimensionHue+15)%360;
-                for(let j=0;j<12;j++)particles.push(new Particle(obj.x,obj.y,`hsl(${dimensionHue},100%,50%)`));
-                particles.push(new Particle(obj.x,obj.y,'#fff',"+100"));
-                gameObjects.splice(i,1);
-            }else if(obj.type==='obstacle' && obj.x<160 && obj.x>80 && jumpHeight<70){triggerBSOD();}
-            else if(obj.type==='portal' && obj.x<160 && obj.x>80){
-                portalCollected=true; portalActive=false;
-                document.getElementById('flash').style.display='block';
-                setTimeout(()=>{document.getElementById('flash').style.display='none';},150);
-                gameObjects.splice(i,1);
-            }
-            if(obj.img) ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
-            if(obj.x<-100) gameObjects.splice(i,1);
-        });
+    gameObjects.forEach((obj,i)=>{
+      obj.x-=gameSpeed;
+      // collision
+      if(obj.x<160&&obj.x>80&&jumpHeight<70){
+        if(obj.type==='tech'){ collectTech(obj); gameObjects.splice(i,1); }
+        else triggerBSOD();
+      }
+      if(obj.img) ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
+      if(obj.x<-100) gameObjects.splice(i,1);
+    });
 
-        // shake glitch on landing
-        if(landed && yVelocity===0 && jumpHeight===0){
-            shake=10;
-        }
-        if(shake>0){ctx.translate(Math.random()*shake,Math.random()*shake); shake*=0.7;}
-
-        document.getElementById('score').innerText=`DIMENSION: ${score}`;
-        document.getElementById('highScore').innerText=`BEST: ${highScore}`;
-
-        // Reset portalCollected after leaving Hot Food BG
-        if(portalCollected && score%5000!==0) portalCollected=false;
-
-    }else{
-        ctx.fillStyle="rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.fillStyle="#0ff"; ctx.textAlign="center"; ctx.font="24px Courier";
-        ctx.fillText("TAP TO INJECT CODE",canvas.width/2,canvas.height/2);
+    // snack portal every 5000 points
+    if(score>0 && score%5000===0 && !portalActive){
+      portalActive=true;
+      particles.push(new Particle(canvas.width/2,canvas.height/2,'#fff','FLASH'));
+      setTimeout(()=>{ portalActive=false; },2000);
     }
 
-    ctx.restore();
-    requestAnimationFrame(loop);
+    document.getElementById('score').innerText=`DIMENSION: ${score}`;
+    document.getElementById('highScore').innerText=`BEST: ${highScore}`;
+
+  }else{
+    ctx.fillStyle="rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle="#0ff"; ctx.textAlign="center"; ctx.font="24px Courier"; ctx.fillText("TAP TO INJECT CODE",canvas.width/2,canvas.height/2);
+  }
+  requestAnimationFrame(loop);
 }
 
-window.addEventListener('touchstart',(e)=>{
-    if(e.target.closest('.btn'))return;
-    if(gameState!=='PLAYING'){ gameState='PLAYING'; score=0; frame=0; gameObjects=[]; bgMusic.play().catch(()=>{});}
-    else if(jumpHeight===0)yVelocity=-22;
-    e.preventDefault();
+window.addEventListener('touchstart', e=>{
+  if(e.target.closest('.btn')) return;
+  if(gameState!=='PLAYING'){ gameState='PLAYING'; score=0; frame=0; gameObjects=[]; bonusCount=0; bgMusic.play().catch(()=>{});}
+  else if(jumpHeight===0){ yVelocity=-22; bonusCount=0; bonusParticles=[]; }
+  e.preventDefault();
 },{passive:false});
 
-load(); resize(); window.addEventListener('resize',resize);
-loop();
+load(); resize(); window.addEventListener('resize',resize); loop();
 </script>
 
 </body>
