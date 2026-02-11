@@ -3,12 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Maximum Reality: Grounded</title>
+    <title>Maximum Reality: Infinity</title>
     <style>
-        :root { --glitch-color: rgba(0, 255, 255, 0.05); }
+        :root { 
+            --glitch-color: rgba(0, 255, 255, 0.05); 
+            --building-tint: none; /* Dynamic filter */
+        }
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
-            overflow: hidden; background: #1a1a1a;
+            overflow: hidden; background: #000;
             -webkit-user-select: none; touch-action: none;
         }
         #gameCanvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
@@ -22,7 +25,7 @@
 <body>
     <div class="ui-layer">
         <div id="score">DIMENSION: 0</div>
-        <div id="status">AZUL ONLINE...</div>
+        <div id="status">AUDIO STANDBY...</div>
     </div>
     <canvas id="gameCanvas"></canvas>
 
@@ -30,8 +33,12 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- THE ANCHOR ---
-const GROUND_Y_OFFSET = 80; // Pixels from the very bottom
+// --- AUDIO SETUP ---
+const bgMusic = new Audio('password-infinity.mp3');
+bgMusic.loop = true;
+
+// --- LAYOUT ---
+const GROUND_Y_OFFSET = 100; 
 let floorY;
 
 const ASSETS = {
@@ -46,6 +53,7 @@ const ASSETS = {
 
 let gameState = 'START', score = 0, frame = 0, gameSpeed = 7;
 let jumpHeight = 0, yVelocity = 0, shake = 0;
+let dimensionHue = 0; // For shifting building colors
 const gravity = 1.2, imgCache = {};
 
 function load() {
@@ -69,22 +77,13 @@ window.addEventListener('resize', resize); resize();
 let gameObjects = [], backgroundProps = [];
 
 function spawn() {
-    // Spawn the SINGLE Lori-Blur asset
-    if (Math.random() > 0.992) {
-        backgroundProps.push({ 
-            x: canvas.width + 200, 
-            y: floorY - 320, 
-            w: 200, h: 320, 
-            passed: false 
-        });
+    if (Math.random() > 0.993) {
+        backgroundProps.push({ x: canvas.width + 200, y: floorY - 350, w: 220, h: 350, passed: false });
     }
-    
-    if (frame % 90 === 0) {
+    if (frame % 85 === 0) {
         const isSnack = Math.random() > 0.7;
         gameObjects.push({
-            x: canvas.width + 100, 
-            y: floorY - 60, 
-            w: 60, h: 60,
+            x: canvas.width + 100, y: floorY - 60, w: 60, h: 60,
             type: isSnack ? 'snack' : 'obstacle',
             img: isSnack ? imgCache.snacks[0] : imgCache.obstacles[0]
         });
@@ -95,37 +94,49 @@ function draw() {
     // 1. Static BG
     if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
     
-    // 2. Parallax Buildings (Pinned to Floor)
+    // 2. Parallax Buildings with Shiftable Color
     const layers = [
-        {img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 500}, 
-        {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 400}, 
-        {img: imgCache.buildings[0], s: 3, op: 0.6, h: 300}
+        {img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 550}, 
+        {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 450}, 
+        {img: imgCache.buildings[0], s: 3, op: 0.6, h: 350}
     ];
+    
     layers.forEach(l => {
         if (l.img.complete) {
+            ctx.save();
             let x = -(frame * l.s) % canvas.width;
             ctx.globalAlpha = l.op;
+            // Apply the dimensional hue shift
+            ctx.filter = `hue-rotate(${dimensionHue}deg) brightness(1.2)`;
             ctx.drawImage(l.img, x, floorY - l.h, canvas.width, l.h);
             ctx.drawImage(l.img, x + canvas.width, floorY - l.h, canvas.width, l.h);
+            ctx.restore();
         }
     });
-    ctx.globalAlpha = 1;
 
-    // 3. The Lori-Blur (The single specter)
+    // 3. The Lori-Blur (Triggering the shift)
     backgroundProps.forEach((p, i) => {
         p.x -= 4; 
         if (imgCache.loriBlur.complete) {
-            ctx.globalAlpha = 0.6;
+            ctx.save();
+            ctx.globalAlpha = 0.5;
             ctx.drawImage(imgCache.loriBlur, p.x, p.y, p.w, p.h);
+            ctx.restore();
         }
-        if (p.x < -300) backgroundProps.splice(i, 1);
+        // When Azul passes Lori, shift the city color!
+        if (!p.passed && p.x < 150) {
+            p.passed = true;
+            shake = 20;
+            dimensionHue += 90; // Rotate through colors
+            document.getElementById('status').innerText = "DIMENSIONAL ROTATION...";
+        }
+        if (p.x < -350) backgroundProps.splice(i, 1);
     });
-    ctx.globalAlpha = 1;
 
-    // 4. THE GROUND (Guaranteed Visible)
+    // 4. THE GROUND
     if (imgCache.floor.complete) {
         let fX = -(frame * gameSpeed) % 100;
-        for (let i = -1; i < (canvas.width / 100) + 1; i++) {
+        for (let i = -1; i < (canvas.width / 100) + 2; i++) {
             ctx.drawImage(imgCache.floor, (i * 100) + fX, floorY, 100, GROUND_Y_OFFSET);
         }
     }
@@ -133,7 +144,7 @@ function draw() {
 
 function loop() {
     ctx.save();
-    if (shake > 0) { ctx.translate(Math.random()*shake, Math.random()*shake); shake *= 0.8; }
+    if (shake > 0) { ctx.translate(Math.random()*shake, Math.random()*shake); shake *= 0.85; }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     draw();
 
@@ -142,35 +153,37 @@ function loop() {
         jumpHeight -= yVelocity; yVelocity += gravity;
         if (jumpHeight <= 0) { jumpHeight = 0; yVelocity = 0; }
 
-        // Azul Run Cycle (sitting on floorY)
         const aFrame = Math.floor(frame / 6) % 4;
         if (imgCache.azul[aFrame].complete) {
-            // Feet are locked to floorY
-            ctx.drawImage(imgCache.azul[aFrame], 80, floorY - 110 - jumpHeight, 90, 115);
+            ctx.drawImage(imgCache.azul[aFrame], 100, floorY - 110 - jumpHeight, 90, 115);
         }
 
         gameObjects.forEach((obj, i) => {
             obj.x -= gameSpeed;
-            if (obj.x < 150 && obj.x > 80 && jumpHeight < 40) {
+            if (obj.x < 160 && obj.x > 80 && jumpHeight < 45) {
                 if (obj.type === 'snack') { score += 100; gameObjects.splice(i, 1); }
-                else { gameState = 'GAMEOVER'; }
+                else { gameState = 'GAMEOVER'; bgMusic.pause(); }
             }
             if (obj.img && obj.img.complete) ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
             if (obj.x < -100) gameObjects.splice(i, 1);
         });
         document.getElementById('score').innerText = `DIMENSION: ${score}`;
     } else {
-        ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0,0,canvas.width, canvas.height);
-        ctx.fillStyle = "#0ff"; ctx.textAlign = "center"; ctx.font = "20px Courier";
-        ctx.fillText("TAP TO ENTER MAXIMUM REALITY", canvas.width/2, canvas.height/2);
+        ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width, canvas.height);
+        ctx.fillStyle = "#0ff"; ctx.textAlign = "center"; ctx.font = "18px Courier";
+        ctx.fillText(gameState === 'START' ? "TAP TO SYNC & UNMUTE AUDIO" : "CONNECTION LOST - TAP TO REBOOT", canvas.width/2, canvas.height/2);
     }
     ctx.restore();
     requestAnimationFrame(loop);
 }
 
 window.addEventListener('touchstart', (e) => {
-    if (gameState !== 'PLAYING') { gameState = 'PLAYING'; score = 0; frame = 0; gameObjects = []; backgroundProps = []; }
-    else if (jumpHeight === 0) yVelocity = -20;
+    if (gameState !== 'PLAYING') {
+        gameState = 'PLAYING'; score = 0; frame = 0; gameObjects = []; backgroundProps = [];
+        dimensionHue = 0;
+        bgMusic.play(); // Unlocks audio on iPhone
+        document.getElementById('status').innerText = "AUDIO SYNCED";
+    } else if (jumpHeight === 0) yVelocity = -22;
     e.preventDefault();
 }, {passive: false});
 
