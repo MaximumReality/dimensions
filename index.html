@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Maximum Reality: Dimensions</title>
+    <title>Maximum Reality: Azul's Run</title>
     <style>
         body { 
             margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', Courier, monospace;
@@ -16,19 +16,12 @@
             color: #0ff; text-shadow: 0 0 10px #0ff; pointer-events: none;
             padding: 20px; z-index: 100;
         }
-        #scoreDisplay { font-size: 24px; font-weight: bold; }
-        .crt-overlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
-            background-size: 100% 4px; pointer-events: none; z-index: 10;
-        }
     </style>
 </head>
 <body>
-    <div class="crt-overlay"></div>
     <div class="ui-layer">
         <div id="scoreDisplay">DIMENSION: 0</div>
-        <div id="status">MOCHKIL HACK DETECTED...</div>
+        <div id="status">AZUL CONNECTED...</div>
     </div>
     <canvas id="gameCanvas"></canvas>
 
@@ -36,26 +29,26 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// ASSET BASE (Using your dimension assets)
 const ASSETS = {
     bg: 'gg-bg.png',
     floor: 'floor.png',
-    lori: 'lori-suit.png',
-    azul: ['Azul-run.png', 'Azul-run2.png', 'Azul-run3.png'],
+    // Azul-doll sequence for the run cycle
+    azul: ['Azul-doll.png', 'Azul-doll2.png', 'Azul-doll3.png', 'Azul-doll4.png'],
     buildings: ['building-a.png', 'building-b.png', 'building-c.png'],
-    snacks: ['mochkil-burger.png', 'pink-donut.png', 'taco.png', 'hotdog.png', 'chips.png'],
-    obstacles: ['cardboard_tank.png', 'dumpster.png', 'litter-box.png']
+    // Lori is now a background prop
+    lori: 'lori-suit.png',
+    snacks: ['mochkil-burger.png', 'pink-donut.png', 'taco.png'],
+    obstacles: ['cardboard_tank.png', 'dumpster.png']
 };
 
 let gameState = 'START';
 let score = 0;
 let frame = 0;
-let gameSpeed = 6;
+let gameSpeed = 7;
 let jumpHeight = 0;
 let yVelocity = 0;
 const gravity = 1.0;
 
-// Load images
 const imgCache = {};
 function loadAssets() {
     Object.keys(ASSETS).forEach(key => {
@@ -77,54 +70,65 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-class Entity {
-    constructor(x, y, w, h, type) {
-        this.x = x; this.y = y; this.w = w; this.h = h; this.type = type;
-        this.active = true;
-    }
-}
-
 let gameObjects = [];
+let backgroundProps = [];
 
-function spawnObject() {
-    const isSnack = Math.random() > 0.5;
-    const pool = isSnack ? ASSETS.snacks : ASSETS.obstacles;
-    const file = pool[Math.floor(Math.random() * pool.length)];
-    const img = new Image(); img.src = file;
-    
-    gameObjects.push({
-        x: canvas.width + 100,
-        y: canvas.height - 180,
-        w: 60, h: 60,
-        img: img,
-        type: isSnack ? 'snack' : 'obstacle'
-    });
+function spawnWorld() {
+    // Random chance to spawn Lori as background scenery
+    if (Math.random() > 0.95) {
+        backgroundProps.push({
+            x: canvas.width + 100,
+            y: canvas.height - 350,
+            w: 120, h: 200,
+            img: imgCache.lori,
+            type: 'scenery'
+        });
+    }
+
+    // Standard snacks/obstacles
+    if (frame % 80 === 0) {
+        const isSnack = Math.random() > 0.5;
+        const pool = isSnack ? ASSETS.snacks : ASSETS.obstacles;
+        const file = pool[Math.floor(Math.random() * pool.length)];
+        const img = new Image(); img.src = file;
+        
+        gameObjects.push({
+            x: canvas.width + 100,
+            y: canvas.height - 180,
+            w: 60, h: 60,
+            img: img,
+            type: isSnack ? 'snack' : 'obstacle'
+        });
+    }
 }
 
 function drawBackground() {
-    // 1. Sky/Gray Background
-    if (imgCache.bg.complete) {
-        ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
-    }
+    if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
 
-    // 2. Parallax Buildings (Layered correctly C -> B -> A)
+    // Parallax Buildings
     const layers = [
-        { img: imgCache.buildings[2], speed: 0.5, opacity: 0.3, h: 0.8 }, // C
-        { img: imgCache.buildings[1], speed: 1.5, opacity: 0.6, h: 0.6 }, // B
-        { img: imgCache.buildings[0], speed: 3.0, opacity: 1.0, h: 0.4 }  // A
+        { img: imgCache.buildings[2], speed: 0.5, op: 0.3, h: 0.8 },
+        { img: imgCache.buildings[1], speed: 1.5, op: 0.6, h: 0.6 },
+        { img: imgCache.buildings[0], speed: 3.0, op: 1.0, h: 0.4 }
     ];
 
     layers.forEach(l => {
-        if (l.img && l.img.complete) {
+        if (l.img.complete) {
             let xPos = -(frame * l.speed) % canvas.width;
-            ctx.globalAlpha = l.opacity;
+            ctx.globalAlpha = l.op;
             ctx.drawImage(l.img, xPos, canvas.height - (canvas.height * l.h) - 100, canvas.width, canvas.height * l.h);
             ctx.drawImage(l.img, xPos + canvas.width, canvas.height - (canvas.height * l.h) - 100, canvas.width, canvas.height * l.h);
         }
     });
     ctx.globalAlpha = 1.0;
 
-    // 3. Floor
+    // Draw background Lori
+    backgroundProps.forEach((prop, i) => {
+        prop.x -= 3.0; // Moves with Layer A speed
+        if (prop.img.complete) ctx.drawImage(prop.img, prop.x, prop.y, prop.w, prop.h);
+        if (prop.x < -200) backgroundProps.splice(i, 1);
+    });
+
     if (imgCache.floor.complete) {
         let fX = -(frame * gameSpeed) % 100;
         for (let i = 0; i < (canvas.width / 100) + 2; i++) {
@@ -133,77 +137,58 @@ function drawBackground() {
     }
 }
 
-function update() {
-    if (gameState !== 'PLAYING') return;
-    
-    frame++;
-    if (frame % 100 === 0) spawnObject();
-
-    // Jumping physics
-    jumpHeight -= yVelocity;
-    yVelocity += gravity;
-    if (jumpHeight <= 0) { jumpHeight = 0; yVelocity = 0; }
-
-    gameObjects.forEach((obj, i) => {
-        obj.x -= gameSpeed;
-        // Collision
-        if (obj.x < 300 && obj.x > 100 && jumpHeight < 50) {
-            if (obj.type === 'snack') {
-                score += 100;
-                gameObjects.splice(i, 1);
-                document.getElementById('status').innerText = "SNACK ACQUIRED!";
-            } else {
-                gameState = 'GAMEOVER';
-            }
-        }
-        if (obj.x < -100) gameObjects.splice(i, 1);
-    });
-
-    document.getElementById('scoreDisplay').innerText = `DIMENSION: ${score}`;
-}
-
-function draw() {
+function loop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawBackground();
 
-    // Draw Lori (Floating/Static Commander)
-    if (imgCache.lori.complete) {
-        let hover = Math.sin(frame * 0.05) * 10;
-        ctx.drawImage(imgCache.lori, 50, canvas.height - 350 + hover, 150, 250);
-    }
+    if (gameState === 'PLAYING') {
+        frame++;
+        spawnWorld();
 
-    // Draw Azul (Running)
-    const azulFrame = Math.floor(frame / 8) % 3;
-    const azulImg = imgCache.azul[azulFrame];
-    if (azulImg && azulImg.complete) {
-        ctx.drawImage(azulImg, 220, canvas.height - 180 - jumpHeight, 80, 80);
-    }
+        // Azul Run Cycle (using Azul-doll 1-4)
+        const runFrame = Math.floor(frame / 6) % 4;
+        const azulImg = imgCache.azul[runFrame];
+        
+        // Jumping
+        jumpHeight -= yVelocity;
+        yVelocity += gravity;
+        if (jumpHeight <= 0) { jumpHeight = 0; yVelocity = 0; }
 
-    // Draw Obstacles/Snacks
-    gameObjects.forEach(obj => {
-        if (obj.img.complete) ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
-    });
+        if (azulImg && azulImg.complete) {
+            ctx.drawImage(azulImg, 150, canvas.height - 210 - jumpHeight, 100, 120);
+        }
+
+        // Object Logic
+        gameObjects.forEach((obj, i) => {
+            obj.x -= gameSpeed;
+            if (obj.x < 220 && obj.x > 150 && jumpHeight < 50) {
+                if (obj.type === 'snack') {
+                    score += 100; gameObjects.splice(i, 1);
+                } else {
+                    gameState = 'GAMEOVER';
+                }
+            }
+            if (obj.img.complete) ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+            if (obj.x < -100) gameObjects.splice(i, 1);
+        });
+    }
 
     if (gameState !== 'PLAYING') {
-        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
         ctx.fillRect(0,0,canvas.width, canvas.height);
         ctx.fillStyle = "#0ff";
         ctx.textAlign = "center";
-        ctx.font = "30px Courier";
-        ctx.fillText(gameState === 'START' ? "TAP TO ENTER DIMENSION" : "DIMENSION COLLAPSED", canvas.width/2, canvas.height/2);
+        ctx.fillText("TAP AZUL TO START", canvas.width/2, canvas.height/2);
     }
-}
 
-function loop() {
-    update();
-    draw();
+    document.getElementById('scoreDisplay').innerText = `DIMENSION: ${score}`;
     requestAnimationFrame(loop);
 }
 
 window.addEventListener('touchstart', () => {
     if (gameState !== 'PLAYING') {
         gameState = 'PLAYING';
-        score = 0; gameObjects = []; frame = 0;
+        score = 0; gameObjects = []; backgroundProps = []; frame = 0;
     } else if (jumpHeight === 0) {
         yVelocity = -18;
     }
