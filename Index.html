@@ -8,7 +8,6 @@
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; -webkit-user-select: none; touch-action: none; }
         #gameCanvas { display: block; width: 100vw; height: 100vh; background: #000; }
         
-        /* UI HUD */
         .ui-layer {
             position: absolute; top: env(safe-area-inset-top); left: 20px;
             color: #0ff; font-family: 'Courier New', monospace;
@@ -17,7 +16,6 @@
         #score { font-size: 24px; font-weight: bold; }
         #multiplier { font-size: 16px; color: #fff; }
         
-        /* INTERACTIVE CONTROLS */
         .controls {
             position: absolute; top: env(safe-area-inset-top); right: 20px;
             display: flex; gap: 15px; z-index: 150;
@@ -25,9 +23,9 @@
         .btn { 
             font-size: 24px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; 
             border-radius: 8px; padding: 5px 10px; color: #0ff; cursor: pointer;
-            backdrop-filter: blur(5px);
+            backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center;
         }
-        .home-btn { text-decoration: none; display: flex; align-items: center; justify-content: center; }
+        .home-btn { text-decoration: none; }
 
         #bsod {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -57,16 +55,45 @@
     <canvas id="gameCanvas"></canvas>
 
 <script>
-<script>
-// ... (Asset loading and setup remains the same)
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const bgMusic = new Audio('password-infinity.mp3');
+bgMusic.loop = true;
 
-// --- 1. RESTORED PARTICLE CLASS ---
+// GAME STATE
+let isMuted = false, isPaused = false;
+let gameState = 'START', currentZone = 'CYBER'; 
+let score = 0, combo = 1, frame = 0, gameSpeed = 7, snackX = 0;
+let lastPortalMilestone = 0, portalActive = false;
+let jumpHeight = 0, yVelocity = 0, shake = 0, dimensionHue = 0;
+let timeScale = 1.0, coyoteFrames = 0;
+const gravity = 1.2, GROUND_Y_OFFSET = 100;
+let floorY, highScore = localStorage.getItem('maxRealityHighScore') || 0;
+
+// ASSETS
+const ASSETS = {
+    bg: 'gg-bg.png',
+    snackBG: 'hot-food-c-store-wp.JPG',
+    floor: 'floor.png',
+    azul: ['Azul-doll.png', 'Azul-doll2.png', 'Azul-doll3.png', 'Azul-doll4.png'],
+    buildings: ['building-a.png', 'building-b.png', 'building-c.png'],
+    obstacles: ['old-pc.png'],
+    portal: 'snack-portal.png'
+};
+
+const LOOT_HARDWARE = ['power-supply.png', '2tb.png', 'curve-keyboard.png', 'motherboard.png', 'ssd.png', 'graphics-card.png', 'circuitpython.png'];
+const LOOT_SNACKS = ['taco.png', 'soda.png', 'hotdog.png', 'roast-chicken.png', 'chips.png', 'pink-donut.png'];
+
+const imgCache = { loot: [], snacks: [] };
+let gameObjects = [], particles = [], columns, drops = [];
+
+// PARTICLE SYSTEM
 class Particle {
     constructor(x, y, color, text = null) {
         this.x = x; this.y = y;
-        this.char = text || ["0", "1"][Math.floor(Math.random() * 2)];
+        this.char = text || (Math.random() > 0.5 ? "0" : "1");
         this.size = text ? 28 : Math.random() * 10 + 12;
-        this.speedX = text ? (Math.random() - 0.5) * 5 : (Math.random() - 0.5) * 12;
+        this.speedX = (Math.random() - 0.5) * (text ? 4 : 12);
         this.speedY = text ? -5 : (Math.random() - 0.5) * 12;
         this.color = color;
         this.life = 1.0;
@@ -79,22 +106,61 @@ class Particle {
     }
 }
 
-let particles = []; // Array to hold the "juice"
+// INITIALIZATION
+function initMatrix() {
+    columns = Math.floor(canvas.width / 20);
+    drops = Array(columns).fill(1);
+}
 
-// --- 2. UPDATED SPAWN (5000 Point Milestone) ---
+function load() {
+    Object.keys(ASSETS).forEach(key => {
+        if (Array.isArray(ASSETS[key])) {
+            imgCache[key] = ASSETS[key].map(src => { let i = new Image(); i.src = src; return i; });
+        } else {
+            imgCache[key] = new Image(); imgCache[key].src = ASSETS[key];
+        }
+    });
+    LOOT_HARDWARE.forEach(src => { let i = new Image(); i.src = src; imgCache.loot.push(i); });
+    LOOT_SNACKS.forEach(src => { let i = new Image(); i.src = src; imgCache.snacks.push(i); });
+}
+
+function resize() { 
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    floorY = canvas.height - GROUND_Y_OFFSET;
+    initMatrix();
+}
+
+// UI HANDLERS
+document.getElementById('muteBtn').onclick = (e) => {
+    e.stopPropagation(); isMuted = !isMuted;
+    bgMusic.muted = isMuted; document.getElementById('muteBtn').innerText = isMuted ? '🔇' : '🔊';
+};
+
+document.getElementById('pauseBtn').onclick = (e) => {
+    e.stopPropagation(); isPaused = !isPaused;
+};
+
+function resetGame() {
+    score = 0; combo = 1; frame = 0; gameSpeed = 7;
+    lastPortalMilestone = 0; portalActive = false;
+    currentZone = 'CYBER'; timeScale = 1.0;
+    gameObjects = []; particles = []; gameState = 'PLAYING';
+    bgMusic.play().catch(()=>{});
+}
+
+function triggerBSOD() {
+    gameState = 'GAMEOVER'; bgMusic.pause();
+    document.getElementById('bsod').style.display = 'block';
+    setTimeout(() => { document.getElementById('bsod').style.display = 'none'; resetGame(); }, 2500);
+}
+
 function spawn() {
-    // Portals now only every 5000 points
     const milestone = Math.floor(score / 5000) * 5000;
     if (score >= 5000 && milestone > lastPortalMilestone && !portalActive) {
-        lastPortalMilestone = milestone;
-        portalActive = true;
-        gameObjects.push({ 
-            x: canvas.width + 100, y: floorY - 140, w: 120, h: 140, 
-            type: 'portal', img: imgCache.portal 
-        });
+        lastPortalMilestone = milestone; portalActive = true;
+        gameObjects.push({ x: canvas.width + 100, y: floorY - 140, w: 120, h: 140, type: 'portal', img: imgCache.portal });
     }
     
-    // Regular item spawning
     if (frame % 80 === 0) {
         const isLoot = Math.random() > 0.3;
         const currentList = (currentZone === 'CYBER') ? imgCache.loot : imgCache.snacks;
@@ -107,60 +173,119 @@ function spawn() {
     }
 }
 
-// --- 3. UPDATED LOOP (Particle Handling & Splash) ---
+function drawBackground() {
+    if (currentZone === 'CYBER') {
+        if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
+        const layers = [{img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 550}, {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 450}, {img: imgCache.buildings[0], s: 3, op: 0.6, h: 350}];
+        layers.forEach(l => {
+            if (l.img.complete) {
+                ctx.save(); let x = -(frame * l.s) % canvas.width;
+                ctx.globalAlpha = l.op; ctx.filter = `hue-rotate(${dimensionHue}deg)`;
+                ctx.drawImage(l.img, x, floorY - l.h, canvas.width, l.h);
+                ctx.drawImage(l.img, x + canvas.width, floorY - l.h, canvas.width, l.h);
+                ctx.restore();
+            }
+        });
+        // Matrix Rain
+        ctx.fillStyle = `hsla(${dimensionHue + 120}, 100%, 50%, 0.4)`;
+        ctx.font = "15px monospace";
+        drops.forEach((y, i) => {
+            ctx.fillText(Math.random() > 0.5 ? "1" : "0", i * 20, y * 20);
+            if (y * 20 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+            drops[i]++;
+        });
+    } else {
+        if (imgCache.snackBG.complete) {
+            const scale = canvas.height / imgCache.snackBG.height;
+            const drawWidth = imgCache.snackBG.width * scale;
+            snackX -= (gameSpeed * 0.5 * timeScale);
+            if (snackX <= -drawWidth) snackX = 0;
+            ctx.drawImage(imgCache.snackBG, snackX, 0, drawWidth, canvas.height);
+            ctx.drawImage(imgCache.snackBG, snackX + drawWidth, 0, drawWidth, canvas.height);
+        }
+    }
+    // Floor
+    if (imgCache.floor.complete) {
+        let fX = -(frame * gameSpeed * timeScale) % 100;
+        for (let i = -1; i < (canvas.width / 100) + 2; i++) {
+            ctx.drawImage(imgCache.floor, (i * 100) + fX, floorY, 100, GROUND_Y_OFFSET);
+        }
+    }
+}
+
 function loop() {
     if (isPaused) { requestAnimationFrame(loop); return; }
     ctx.save();
     if (shake > 0) { ctx.translate(Math.random()*shake, Math.random()*shake); shake *= 0.85; }
-    draw();
+    
+    drawBackground();
 
-    // UPDATE AND DRAW PARTICLES
-    particles.forEach((p, index) => {
-        p.update(); p.draw();
-        if (p.life <= 0) particles.splice(index, 1);
-    });
+    particles.forEach((p, i) => { p.update(); p.draw(); if (p.life <= 0) particles.splice(i, 1); });
 
     if (gameState === 'PLAYING') {
         frame++; spawn();
-        
-        // ... (Azul movement logic) ...
+        jumpHeight -= yVelocity * timeScale;
+        yVelocity += gravity * timeScale;
+        if (jumpHeight <= 0) { jumpHeight = 0; yVelocity = 0; coyoteFrames = 6; } else { coyoteFrames--; }
 
+        // Azul + Glow
+        ctx.save();
+        if (currentZone === 'SNACK') { ctx.shadowBlur = 20; ctx.shadowColor = `hsl(${frame % 360}, 100%, 50%)`; }
+        const aFrame = Math.floor(frame / 6) % 4;
+        ctx.drawImage(imgCache.azul[aFrame], 100, floorY - 110 - jumpHeight, 90, 115);
+        ctx.restore();
+
+        // Game Objects
         gameObjects.forEach((obj, i) => {
             obj.x -= gameSpeed * timeScale;
-            
+            if (obj.type === 'portal' && obj.x < 400 && obj.x > 160) timeScale = 0.4;
+
             const hitboxH = (obj.type === 'tech') ? 75 : 60;
             if (obj.x < 160 && obj.x > 80 && jumpHeight < hitboxH) {
                 if (obj.type === 'portal') {
-                    // Portal Entry Splash
-                    for(let j=0; j<25; j++) particles.push(new Particle(obj.x, obj.y, "#fff"));
-                    
+                    for(let j=0; j<20; j++) particles.push(new Particle(obj.x, obj.y, "#fff"));
                     currentZone = (currentZone === 'CYBER') ? 'SNACK' : 'CYBER';
                     gameSpeed = (currentZone === 'SNACK') ? 12 : 7;
                     timeScale = 1.0; portalActive = false; gameObjects = [];
                 } else if (obj.type === 'tech') {
-                    // --- THE JUICE ---
                     const pCol = (currentZone === 'CYBER') ? "#0ff" : "#ff0";
-                    // Exploding 0s and 1s
-                    for(let j=0; j<12; j++) particles.push(new Particle(obj.x + 40, obj.y + 40, pCol));
-                    // Floating "Score" Text
+                    for(let j=0; j<10; j++) particles.push(new Particle(obj.x + 40, obj.y + 40, pCol));
                     particles.push(new Particle(obj.x, obj.y, "#fff", `+${100 * combo}`));
-                    
-                    score += (100 * combo); 
-                    combo++; 
-                    shake = 8; 
-                    gameObjects.splice(i, 1);
+                    score += (100 * combo); combo++; shake = 5; gameObjects.splice(i, 1);
                 } else if (currentZone === 'CYBER') {
                     triggerBSOD();
                 }
             }
-            // ... (rest of object logic) ...
+            if (obj.x < -150) {
+                if (obj.type === 'portal') portalActive = false;
+                if (obj.type === 'obstacle') combo = 1;
+                gameObjects.splice(i, 1);
+            }
+            if (obj.img) ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
         });
+
+        document.getElementById('score').innerText = `DIMENSION: ${score}`;
+        document.getElementById('multiplier').innerText = `COMBO: X${combo}`;
+        document.getElementById('highScore').innerText = `BEST: ${highScore}`;
+    } else {
+        ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = "#0ff"; ctx.textAlign = "center"; ctx.font = "20px Courier";
+        ctx.fillText("TAP TO START", canvas.width/2, canvas.height/2);
     }
-    // ...
+    
     ctx.restore();
     requestAnimationFrame(loop);
 }
-</script>
 
+window.addEventListener('touchstart', (e) => {
+    if (isPaused) return;
+    if (gameState !== 'PLAYING') resetGame();
+    else if (jumpHeight === 0 || coyoteFrames > 0) { yVelocity = -22; coyoteFrames = 0; }
+    e.preventDefault();
+}, {passive: false});
+
+load(); resize(); window.addEventListener('resize', resize);
+loop();
+</script>
 </body>
 </html>
