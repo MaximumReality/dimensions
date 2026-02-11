@@ -61,7 +61,6 @@ const ctx = canvas.getContext('2d');
 const bgMusic = new Audio('password-infinity.mp3');
 bgMusic.loop = true;
 
-// GAME STATE
 let isMuted = false, isPaused = false;
 let gameState = 'START', currentZone = 'CYBER'; 
 let score = 0, combo = 1, frame = 0, gameSpeed = 7, snackX = 0;
@@ -71,7 +70,6 @@ let timeScale = 1.0, coyoteFrames = 0;
 const gravity = 1.2, GROUND_Y_OFFSET = 100;
 let floorY, highScore = localStorage.getItem('maxRealityHighScore') || 0;
 
-// ASSETS
 const ASSETS = {
     bg: 'gg-bg.png',
     snackBG: 'hot-food-c-store-wp.JPG',
@@ -92,7 +90,7 @@ let gameObjects = [], particles = [], columns, drops = [];
 class Particle {
     constructor(x, y, color, text = null) {
         this.x = x; this.y = y;
-        this.char = text || (Math.random() > 0.5 ? "0" : "1");
+        this.char = text || (Math.random() > 0.5 ? "1" : "0");
         this.size = text ? 32 : Math.random() * 12 + 14;
         this.speedX = (Math.random() - 0.5) * (text ? 4 : 15);
         this.speedY = text ? -6 : (Math.random() - 0.5) * 15;
@@ -130,16 +128,15 @@ function resize() {
     initMatrix();
 }
 
-// UI HANDLERS - FIXED
 document.getElementById('muteBtn').addEventListener('touchstart', (e) => {
     e.stopPropagation(); isMuted = !isMuted;
     bgMusic.muted = isMuted; document.getElementById('muteBtn').innerText = isMuted ? '🔇' : '🔊';
-});
+}, {passive: false});
 
 document.getElementById('pauseBtn').addEventListener('touchstart', (e) => {
     e.stopPropagation(); isPaused = !isPaused;
     document.getElementById('pauseBtn').style.borderColor = isPaused ? '#ff0' : '#0ff';
-});
+}, {passive: false});
 
 function resetGame() {
     score = 0; combo = 1; frame = 0; gameSpeed = 7;
@@ -175,38 +172,47 @@ function spawn() {
 }
 
 function drawBackground() {
+    if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
+
     if (currentZone === 'CYBER') {
-        if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
-        
-        // LORI BLUR LAYER
+        // LORI DEITY LAYER (Furthest back)
         if (imgCache.loriBlur.complete) {
             ctx.save();
-            ctx.globalAlpha = 0.5;
-            let lX = -(frame * 0.8) % canvas.width;
-            ctx.drawImage(imgCache.loriBlur, lX, 50, canvas.width, canvas.height - 100);
-            ctx.drawImage(imgCache.loriBlur, lX + canvas.width, 50, canvas.width, canvas.height - 100);
+            ctx.globalAlpha = 0.4;
+            let lX = -(frame * 0.5) % canvas.width;
+            ctx.drawImage(imgCache.loriBlur, lX, 0, canvas.width, canvas.height);
+            ctx.drawImage(imgCache.loriBlur, lX + canvas.width, 0, canvas.width, canvas.height);
             ctx.restore();
         }
 
-        const layers = [{img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 550}, {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 450}, {img: imgCache.buildings[0], s: 3, op: 0.6, h: 350}];
+        // BUILDINGS
+        const layers = [
+            {img: imgCache.buildings[2], s: 0.8, op: 0.3, h: 550}, 
+            {img: imgCache.buildings[1], s: 2.0, op: 0.5, h: 450}, 
+            {img: imgCache.buildings[0], s: 4.0, op: 0.7, h: 350}
+        ];
         layers.forEach(l => {
             if (l.img.complete) {
-                ctx.save(); let x = -(frame * l.s) % canvas.width;
-                ctx.globalAlpha = l.op; ctx.filter = `hue-rotate(${dimensionHue}deg)`;
+                ctx.save();
+                let x = -(frame * l.s) % canvas.width;
+                ctx.globalAlpha = l.op;
+                ctx.filter = `hue-rotate(${dimensionHue}deg)`;
                 ctx.drawImage(l.img, x, floorY - l.h, canvas.width, l.h);
                 ctx.drawImage(l.img, x + canvas.width, floorY - l.h, canvas.width, l.h);
                 ctx.restore();
             }
         });
 
-        // BRIGHTER MATRIX RAIN
-        ctx.fillStyle = `rgba(0, 255, 255, 0.7)`;
+        // MATRIX RAIN
+        ctx.save();
+        ctx.fillStyle = "rgba(0, 255, 255, 0.8)";
         ctx.font = "bold 18px monospace";
         drops.forEach((y, i) => {
             ctx.fillText(Math.random() > 0.5 ? "1" : "0", i * 20, y * 20);
             if (y * 20 > canvas.height && Math.random() > 0.975) drops[i] = 0;
             drops[i]++;
         });
+        ctx.restore();
     } else {
         if (imgCache.snackBG.complete) {
             const scale = canvas.height / imgCache.snackBG.height;
@@ -217,6 +223,7 @@ function drawBackground() {
             ctx.drawImage(imgCache.snackBG, snackX + drawWidth, 0, drawWidth, canvas.height);
         }
     }
+
     if (imgCache.floor.complete) {
         let fX = -(frame * gameSpeed * timeScale) % 100;
         for (let i = -1; i < (canvas.width / 100) + 2; i++) {
@@ -288,10 +295,10 @@ function loop() {
 }
 
 window.addEventListener('touchstart', (e) => {
+    if (e.target.closest('.btn')) return;
     if (gameState !== 'PLAYING') resetGame();
     else if (jumpHeight === 0 || coyoteFrames > 0) { yVelocity = -22; coyoteFrames = 0; }
-    // Note: No e.preventDefault() here to allow UI button interaction
-}, {passive: true});
+}, {passive: false});
 
 load(); resize(); window.addEventListener('resize', resize);
 loop();
