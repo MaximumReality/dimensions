@@ -52,7 +52,7 @@ const ASSETS={
     scroll:'scrolls.png', book:'book.png',
     pottery:['pottery.png','pottery2.png','pottery3.png','pottery4.png']
 };
-const CYBER_LOOT=['power-supply.png','2tb.png','card.png','core-i7.png','curve-keyboard.png','core-i9.png','cpu-water-cooler.png','optical-drive.png','ram.png','motherboard.png','ssd.png','graphics-card.png','circuitpython.png'];
+const CYBER_LOOT=['power-supply.png','2tb.png','card.png','core-i7.png','curve-keyboard.png','core-i9.png','cpu-water-cooler.png','ram.png','motherboard.png','ssd.png','graphics-card.png','circuitpython.png'];
 const SNACK_LOOT=['bread-slice.png','chips.png','hotdog.png','pink-donut.png','roast-chicken.png','soda.png','taco.png','mochkil-burger.png','mochkil_puffs_orange.png','azulo_blueberry_vanilla.jpg'];
 const POMPEII_LOOT=[ASSETS.scroll, ASSETS.book, ...ASSETS.pottery];
 
@@ -100,30 +100,25 @@ let lastPortalScore=0;
 
 // SPAWN FUNCTION
 function spawn(){
-    // Zone-specific loot
-    let lootArray=[], particleChar='0';
-    if(currentZone==='CYBER'){ lootArray=CYBER_LOOT; particleChar=null; }
-    else if(currentZone==='SNACK'){ lootArray=SNACK_LOOT; particleChar=null; }
-    else if(currentZone==='EARTHQUAKE'){ lootArray=POMPEII_LOOT; particleChar=null; }
+    let lootArray=[];
+    if(currentZone==='CYBER') lootArray=CYBER_LOOT;
+    else if(currentZone==='SNACK') lootArray=SNACK_LOOT;
+    else if(currentZone==='EARTHQUAKE') lootArray=POMPEII_LOOT;
     
-    // Spawn loot
     if(frame%40===0){
         const lootImg=imgCache.loot[Math.floor(Math.random()*lootArray.length)];
         gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'loot',img:lootImg});
     }
     
-    // Spawn particles
     if(currentZone==='CYBER'){ particles.push(new Particle(Math.random()*canvas.width,0,'#0ff',Math.random()>0.5?"1":"0",1.2)); }
     if(currentZone==='SNACK'){ const foods=['🍞','🌭','🍩','🍗','🥤','🌮']; particles.push(new Particle(Math.random()*canvas.width,0,'#fff',foods[Math.floor(Math.random()*foods.length)],1.2)); }
     if(currentZone==='EARTHQUAKE'){ const symbols=['🔥','💨']; particles.push(new Particle(Math.random()*canvas.width,0,'#f80',symbols[Math.floor(Math.random()*symbols.length)],1.2)); }
-    
-    // Spawn Pompeii obstacles
+
     if(currentZone==='EARTHQUAKE' && frame%100===0){
         const obsImg=imgCache.obstacles[Math.floor(Math.random()*imgCache.obstacles.length)];
         gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'obstacle',img:obsImg});
     }
 
-    // Portal spawn every 5000 points
     if(score>=lastPortalScore+5000){
         gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'portal',img:imgCache.portal});
         lastPortalScore=score;
@@ -139,7 +134,6 @@ function drawBackground(){
         if(imgCache.loriBlur.complete){ ctx.save(); ctx.globalAlpha=0.4; let lX=-(frame*0.5)%canvas.width; ctx.drawImage(imgCache.loriBlur,lX,0,canvas.width,canvas.height); ctx.drawImage(imgCache.loriBlur,lX+canvas.width,0,canvas.width,canvas.height); ctx.restore(); }
         const layers=[{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
         layers.forEach(l=>{ if(l.img.complete){ ctx.save(); let x=-(frame*l.s)%canvas.width; ctx.globalAlpha=l.op; ctx.filter=`hue-rotate(${dimensionHue}deg)`; ctx.drawImage(l.img,x,floorY-l.h,canvas.width,l.h); ctx.drawImage(l.img,x+canvas.width,floorY-l.h,canvas.width,l.h); ctx.restore(); }});
-        // Matrix rain
         ctx.save(); ctx.fillStyle=`hsl(${dimensionHue},100%,60%)`; ctx.font="bold 18px monospace";
         drops.forEach((y,i)=>{ ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20); if(y*20>canvas.height && Math.random()>0.975) drops[i]=0; drops[i]++; });
         ctx.restore();
@@ -189,11 +183,14 @@ function loop(){
                     gameObjects.splice(i,1);
                 }
                 else if(obj.type==='portal'){
-                    flashScreen(); 
+                    flashScreen();
+                    // Remove only the portal
+                    gameObjects.splice(i,1);
+                    // Zone cycle
                     if(currentZone==='CYBER'){ currentZone='SNACK'; gameSpeed=7; }
                     else if(currentZone==='SNACK'){ currentZone='EARTHQUAKE'; gameSpeed=12; }
                     else { currentZone='CYBER'; gameSpeed=7; }
-                    bonusCount=0; gameObjects=[]; particles=[];
+                    bonusCount=0;
                     if(currentZone==='EARTHQUAKE'){ beastModeSfx.play(); beastModePlayed=true; }
                 }
             }
