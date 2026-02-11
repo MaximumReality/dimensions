@@ -64,7 +64,7 @@ let gameState = 'START', score = 0, frame = 0, gameSpeed = 7;
 let jumpHeight = 0, yVelocity = 0, shake = 0, dimensionHue = 0;
 const gravity = 1.2, imgCache = {};
 
-// --- MATRIX RAIN LOGIC ---
+// --- 🟢 ADDED: MATRIX ENGINE ---
 let columns;
 let drops = [];
 function initMatrix() {
@@ -74,8 +74,8 @@ function initMatrix() {
 
 function drawMatrix() {
     ctx.save();
-    // Using a subtle hue based on dimensionHue
-    ctx.fillStyle = `hsla(${dimensionHue + 120}, 100%, 50%, 0.15)`;
+    // Subtle glow that matches the dimension shift
+    ctx.fillStyle = `hsla(${dimensionHue + 120}, 100%, 50%, 0.25)`;
     ctx.font = "15px monospace";
     
     for (let i = 0; i < drops.length; i++) {
@@ -90,6 +90,7 @@ function drawMatrix() {
     ctx.restore();
 }
 
+// --- 🟢 ADDED: LOAD ENGINE ---
 function load() {
     Object.keys(ASSETS).forEach(key => {
         if (Array.isArray(ASSETS[key])) {
@@ -99,6 +100,7 @@ function load() {
         }
     });
 }
+
 load();
 
 function resize() { 
@@ -134,14 +136,15 @@ function triggerBSOD() {
 }
 
 function draw() {
-    // 1. Static BG
+    // 1. THE BASE
     if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
     
-    // 2. MATRIX RAIN LAYER (The Sky)
-    drawMatrix();
-    
-    // 3. Buildings
-    const layers = [{img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 550}, {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 450}, {img: imgCache.buildings[0], s: 3, op: 0.6, h: 350}];
+    // 2. THE BUILDINGS
+    const layers = [
+        {img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 550}, 
+        {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 450}, 
+        {img: imgCache.buildings[0], s: 3, op: 0.6, h: 350}
+    ];
     layers.forEach(l => {
         if (l.img.complete) {
             ctx.save();
@@ -154,7 +157,12 @@ function draw() {
         }
     });
 
-    // 4. Lori-Blur
+    // 3. THE MATRIX RAIN (Now visible over buildings!)
+    ctx.globalCompositeOperation = "screen"; 
+    drawMatrix();
+    ctx.globalCompositeOperation = "source-over"; 
+
+    // 4. THE GHOST
     backgroundProps.forEach((p, i) => {
         p.x -= 4; 
         if (imgCache.loriBlur.complete) {
@@ -168,7 +176,7 @@ function draw() {
         if (p.x < -350) backgroundProps.splice(i, 1);
     });
 
-    // 5. Ground
+    // 5. THE FLOOR
     if (imgCache.floor.complete) {
         let fX = -(frame * gameSpeed) % 100;
         for (let i = -1; i < (canvas.width / 100) + 2; i++) {
@@ -230,5 +238,6 @@ window.addEventListener('touchstart', (e) => {
 
 loop();
 </script>
+
 </body>
 </html>
