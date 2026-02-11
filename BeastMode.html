@@ -37,133 +37,260 @@ const beastModeSfx = new Audio('beast_mode.mp3');
 bgMusic.loop = true;
 
 let isMuted = false, isPaused = false, gameState = 'START';
-let score = 0, frame = 0, gameSpeed = 7, dimensionHue = 0;
-let jumpHeight = 0, yVelocity = 0, shake = 0, dimensionLevel = 1;
-let currentZone = 'CYBER', earthquakeActive = false;
+let score = 0, frame = 0, gameSpeed = 7;
+let jumpHeight = 0, yVelocity = 0, shake = 0;
+let dimensionLevel = 1;
+let currentZone = 'CYBER';
+let earthquakeActive = false;
+let portalActive = false;
+let lastPortalScore = 0;
+
 const gravity = 1.2, GROUND_Y_OFFSET = 100;
-let floorY, portalActive = false;
+let floorY;
 
 const ASSETS = {
-    bg: 'gg-bg.png', snackBg: 'hot-food-c-store-wp.JPG', floor: 'floor.png',
-    azul: ['Azul-doll.png', 'Azul-doll2.png', 'Azul-doll3.png', 'Azul-doll4.png'],
-    buildings: ['building-a.png', 'building-b.png', 'building-c.png'],
-    loriBlur: 'lori-blur.png', obstacles: ['old-pc.png'], portal: 'snack-portal.png'
+    bg: 'gg-bg.png',
+    snackBg: 'hot-food-c-store-wp.JPG',
+    floor: 'floor.png',
+    azul: ['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
+    buildings: ['building-a.png','building-b.png','building-c.png'],
+    loriBlur: 'lori-blur.png',
+    obstacles: ['old-pc.png'],
+    portal: 'snack-portal.png'
 };
-const LOOT = ['power-supply.png', '2tb.png', 'motherboard.png', 'ssd.png', 'graphics-card.png', 'taco.png', 'soda.png', 'pink-donut.png'];
+
+const LOOT = [
+    'power-supply.png','2tb.png','motherboard.png',
+    'ssd.png','graphics-card.png','taco.png',
+    'soda.png','pink-donut.png'
+];
 
 const imgCache = { loot: [] };
-let gameObjects = [], drops = [];
+let gameObjects = [];
+let drops = [];
 
-function load() {
-    Object.keys(ASSETS).forEach(key => {
-        if (Array.isArray(ASSETS[key])) { imgCache[key] = ASSETS[key].map(src => { let i = new Image(); i.src = src; return i; }); }
-        else { imgCache[key] = new Image(); imgCache[key].src = ASSETS[key]; }
-    });
-    LOOT.forEach(src => { let i = new Image(); i.src = src; imgCache.loot.push(i); });
-}
-
-function resize() { 
-    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-    floorY = canvas.height - GROUND_Y_OFFSET;
-    drops = Array(Math.floor(canvas.width / 20)).fill(1);
-}
-
-function flash() {
-    const f = document.getElementById('flash');
-    f.style.opacity = 1; setTimeout(() => f.style.opacity = 0, 150);
-}
-
-function spawn() {
-    if (score > 0 && score % 5000 === 0 && !portalActive) {
-        portalActive = true;
-        gameObjects.push({ x: canvas.width + 100, y: floorY - 140, w: 120, h: 140, type: 'portal', img: imgCache.portal });
-    }
-    if (frame % 80 === 0) {
-        const isLoot = Math.random() > 0.4;
-        gameObjects.push({ x: canvas.width + 100, y: floorY - 85, w: 80, h: 80, type: isLoot ? 'tech' : 'obstacle', 
-        img: isLoot ? imgCache.loot[Math.floor(Math.random() * imgCache.loot.length)] : imgCache.obstacles[0] });
-    }
-}
-
-function drawBackground() {
-    if (currentZone === 'CYBER') {
-        if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
-        if (imgCache.loriBlur.complete) {
-            ctx.save(); ctx.globalAlpha = 0.4;
-            let lX = -(frame * 0.5) % canvas.width;
-            ctx.drawImage(imgCache.loriBlur, lX, 0, canvas.width, canvas.height);
-            ctx.drawImage(imgCache.loriBlur, lX + canvas.width, 0, canvas.width, canvas.height);
-            ctx.restore();
+/* LOAD */
+function load(){
+    Object.keys(ASSETS).forEach(key=>{
+        if(Array.isArray(ASSETS[key])){
+            imgCache[key] = ASSETS[key].map(src=>{
+                let i = new Image(); i.src = src; return i;
+            });
+        } else {
+            let i = new Image();
+            i.src = ASSETS[key];
+            imgCache[key] = i;
         }
-        // Rainbow Matrix
-        ctx.save(); ctx.fillStyle = `hsl(${(frame * 2) % 360}, 100%, 60%)`;
-        drops.forEach((y, i) => {
-            ctx.fillText(Math.random() > 0.5 ? "1" : "0", i * 20, y * 20);
-            if (y * 20 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    });
+    LOOT.forEach(src=>{
+        let i = new Image();
+        i.src = src;
+        imgCache.loot.push(i);
+    });
+}
+
+/* RESIZE */
+function resize(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    floorY = canvas.height - GROUND_Y_OFFSET;
+    drops = Array(Math.floor(canvas.width/20)).fill(1);
+}
+
+/* FLASH */
+function flash(){
+    const f = document.getElementById('flash');
+    f.style.opacity = 1;
+    setTimeout(()=>f.style.opacity = 0,150);
+}
+
+/* SPAWN */
+function spawn(){
+
+    // PORTAL (only once per 5000 milestone)
+    if(score > 0 && score % 5000 === 0 && score !== lastPortalScore){
+        lastPortalScore = score;
+        portalActive = true;
+        gameObjects.push({
+            x: canvas.width + 100,
+            y: floorY - 140,
+            w: 120,
+            h: 140,
+            type: 'portal',
+            img: imgCache.portal
+        });
+    }
+
+    // NORMAL OBJECTS
+    if(frame % 80 === 0){
+        const isLoot = Math.random() > 0.4;
+        gameObjects.push({
+            x: canvas.width + 100,
+            y: floorY - 85,
+            w: 80,
+            h: 80,
+            type: isLoot ? 'tech' : 'obstacle',
+            img: isLoot
+                ? imgCache.loot[Math.floor(Math.random()*imgCache.loot.length)]
+                : imgCache.obstacles[0]
+        });
+    }
+}
+
+/* BACKGROUND */
+function drawBackground(){
+
+    if(currentZone === 'CYBER'){
+        if(imgCache.bg.complete)
+            ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
+
+        ctx.save();
+        ctx.fillStyle = `hsl(${(frame*2)%360},100%,60%)`;
+        ctx.font = "16px monospace";
+        drops.forEach((y,i)=>{
+            ctx.fillText(Math.random()>0.5?"1":"0", i*20, y*20);
+            if(y*20 > canvas.height && Math.random()>0.975) drops[i]=0;
             drops[i]++;
         });
         ctx.restore();
+
     } else {
-        if (imgCache.snackBg.complete) {
-            let sX = -(frame * 3) % canvas.width;
-            ctx.drawImage(imgCache.snackBg, sX, 0, canvas.width, canvas.height);
-            ctx.drawImage(imgCache.snackBg, sX + canvas.width, 0, canvas.width, canvas.height);
+
+        if(imgCache.snackBg.complete){
+            let sX = -(frame*3)%canvas.width;
+            ctx.drawImage(imgCache.snackBg,sX,0,canvas.width,canvas.height);
+            ctx.drawImage(imgCache.snackBg,sX+canvas.width,0,canvas.width,canvas.height);
         }
     }
-    // Solid Ground
-    ctx.fillStyle = "#000"; ctx.fillRect(0, floorY, canvas.width, GROUND_Y_OFFSET);
-    if (imgCache.floor.complete) {
-        let fX = -(frame * gameSpeed) % 100;
-        for (let i = -1; i < (canvas.width / 100) + 2; i++) ctx.drawImage(imgCache.floor, (i * 100) + fX, floorY, 100, GROUND_Y_OFFSET);
+
+    // GROUND
+    ctx.fillStyle="#000";
+    ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET);
+
+    if(imgCache.floor.complete){
+        let fX = -(frame*gameSpeed)%100;
+        for(let i=-1;i<(canvas.width/100)+2;i++){
+            ctx.drawImage(imgCache.floor,(i*100)+fX,floorY,100,GROUND_Y_OFFSET);
+        }
     }
 }
 
-function loop() {
-    if (isPaused) { requestAnimationFrame(loop); return; }
+/* LOOP */
+function loop(){
+
+    if(isPaused){ requestAnimationFrame(loop); return; }
+
     ctx.save();
-    if (shake > 0) { ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake); shake *= 0.85; }
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if(shake>0){
+        ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
+        shake *= 0.85;
+    }
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
     drawBackground();
 
-    if (gameState === 'PLAYING') {
-        frame++; spawn();
-        jumpHeight -= yVelocity; yVelocity += gravity;
-        if (jumpHeight <= 0) {
-            if (yVelocity > 0 && earthquakeActive) shake = 20; // SEISMIC STOMP
-            jumpHeight = 0; yVelocity = 0;
-        }
-        const aFrame = Math.floor(frame / 6) % 4;
-        ctx.drawImage(imgCache.azul[aFrame], 100, floorY - 110 - jumpHeight, 90, 115);
+    if(gameState==='PLAYING'){
 
-        gameObjects.forEach((obj, i) => {
-            obj.x -= gameSpeed;
-            if (obj.x < 160 && obj.x > 80 && jumpHeight < 70) {
-                if (obj.type === 'portal') {
-                    flash(); dimensionLevel++;
-                    if (dimensionLevel === 2) currentZone = 'SNACK';
-                    else if (dimensionLevel === 3) { currentZone = 'CYBER'; earthquakeActive = true; beastModeSfx.play(); }
-                    else { currentZone = 'CYBER'; earthquakeActive = false; dimensionLevel = 1; }
-                    portalActive = false; gameObjects = [];
-                } else if (obj.type === 'tech') { score += 100; gameObjects.splice(i, 1); }
-                else { gameState = 'START'; }
+        frame++;
+        spawn();
+
+        jumpHeight -= yVelocity;
+        yVelocity += gravity;
+
+        if(jumpHeight <= 0){
+            if(yVelocity > 0 && earthquakeActive){
+                shake = 20; // BEAST STOMP
             }
-            if (obj.img) ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+            jumpHeight = 0;
+            yVelocity = 0;
+        }
+
+        const aFrame = Math.floor(frame/6)%4;
+        ctx.drawImage(imgCache.azul[aFrame],100,floorY-110-jumpHeight,90,115);
+
+        gameObjects.forEach((obj,i)=>{
+            obj.x -= gameSpeed;
+
+            if(obj.x<160 && obj.x>80 && jumpHeight<70){
+
+                if(obj.type==='portal'){
+
+                    flash();
+                    dimensionLevel++;
+
+                    if(dimensionLevel===2){
+                        currentZone='SNACK';
+                        earthquakeActive=false;
+                    }
+                    else if(dimensionLevel===3){
+                        currentZone='CYBER';
+                        earthquakeActive=true;
+
+                        beastModeSfx.currentTime = 0;
+                        beastModeSfx.play();
+                    }
+                    else{
+                        dimensionLevel=1;
+                        currentZone='CYBER';
+                        earthquakeActive=false;
+                    }
+
+                    portalActive=false;
+                    gameObjects=[];
+                }
+
+                else if(obj.type==='tech'){
+                    score += 100;
+                    gameObjects.splice(i,1);
+                }
+
+                else{
+                    gameState='START';
+                }
+            }
+
+            if(obj.img)
+                ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
         });
-        document.getElementById('score').innerText = `DIMENSION: ${score}`;
-        document.getElementById('status').innerText = `ZONE: ${currentZone} ${earthquakeActive ? '(BEAST MODE)' : ''}`;
+
+        document.getElementById('score').innerText=`DIMENSION: ${score}`;
+        document.getElementById('status').innerText =
+            `ZONE: ${currentZone} ${earthquakeActive ? '(BEAST MODE)' : ''}`;
     }
+
     ctx.restore();
     requestAnimationFrame(loop);
 }
 
-window.addEventListener('touchstart', (e) => {
-    if (e.target.closest('.btn')) return;
-    if (gameState !== 'PLAYING') { gameState = 'PLAYING'; score = 0; frame = 0; bgMusic.play(); }
-    else if (jumpHeight === 0) yVelocity = -22;
-    e.preventDefault();
-}, {passive: false});
+/* TOUCH */
+window.addEventListener('touchstart',(e)=>{
 
-load(); resize(); loop();
+    if(e.target.closest('.btn')) return;
+
+    if(gameState!=='PLAYING'){
+        gameState='PLAYING';
+        score=0;
+        frame=0;
+        dimensionLevel=1;
+        currentZone='CYBER';
+        earthquakeActive=false;
+        portalActive=false;
+        lastPortalScore=0;
+        gameObjects=[];
+        bgMusic.play();
+    }
+    else if(jumpHeight===0){
+        yVelocity=-22;
+    }
+
+    e.preventDefault();
+
+},{passive:false});
+
+load();
+resize();
+loop();
 </script>
 </body>
 </html>
