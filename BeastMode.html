@@ -140,6 +140,22 @@ function triggerBSOD(){
     document.getElementById('bsod').style.display='block';
     setTimeout(()=>{document.getElementById('bsod').style.display='none'; gameState='START';},2000);
 }
+    function resetGame() {
+    score = 0;
+    frame = 0;
+    jumpHeight = 0;
+    yVelocity = 0;
+    shake = 0;
+    bonusCount = 0;
+    gameObjects = [];
+    portalActive = false;
+    beastModePlayed = false;
+    lastPortalScore = 0;
+    particles = [];
+    currentZone = 'CYBER';
+    gameSpeed = 7;
+    dimensionHue = 0;
+}
 
 // SPAWNING
 let gameObjects=[];
@@ -289,7 +305,12 @@ function loop(){
 // TOUCH
 window.addEventListener('touchstart', e=>{
     if(e.target.closest('.btn')) return;
-    if(gameState!=='PLAYING'){ gameState='PLAYING'; score=0; frame=0; gameObjects=[]; portalActive=false; bonusCount=0; bgMusic.play(); }
+
+    if(gameState!=='PLAYING'){
+        resetGame();  // start fresh
+        gameState='PLAYING';
+        bgMusic.play();
+    }
     else if(jumpHeight===0) yVelocity=-22;
     e.preventDefault();
 },{passive:false});
