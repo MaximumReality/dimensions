@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Maximum Reality: Matrix Infinity</title>
+    <title>Maximum Reality: Binary Infinity</title>
     <style>
         :root { --glitch-color: rgba(0, 255, 255, 0.05); }
         body, html { 
@@ -33,7 +33,7 @@
     </div>
     <div class="ui-layer">
         <div id="score">DIMENSION: 0</div>
-        <div id="status">INJECTING CODE...</div>
+        <div id="status">AZUL ONLINE...</div>
     </div>
     <canvas id="gameCanvas"></canvas>
 
@@ -62,10 +62,38 @@ const LOOT_ASSETS = [
     'ssd.png', 'core-i9.png', 'card.png', 'graphics-card.png', 'circuitpython.png'
 ];
 
-const MATRIX_CHARS = "0123456789ABCDEF01";
+const MATRIX_CHARS = "0123456789ABCDEF";
 let gameState = 'START', score = 0, frame = 0, gameSpeed = 7;
 let jumpHeight = 0, yVelocity = 0, shake = 0, dimensionHue = 0;
 const gravity = 1.2, imgCache = { loot: [] };
+
+// --- 🟢 PARTICLE SYSTEM ---
+let particles = [];
+const BINARY = ["0", "1"];
+
+class Particle {
+    constructor(x, y, color, text = null) {
+        this.x = x; this.y = y;
+        this.char = text || BINARY[Math.floor(Math.random() * 2)];
+        this.size = text ? 24 : Math.random() * 10 + 12;
+        this.speedX = text ? 0 : (Math.random() - 0.5) * 10;
+        this.speedY = text ? -3 : (Math.random() - 0.5) * 10;
+        this.color = color;
+        this.life = 1.0;
+    }
+    update() {
+        this.x += this.speedX; this.y += this.speedY;
+        this.life -= 0.025;
+    }
+    draw() {
+        ctx.save();
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = this.life;
+        ctx.font = `bold ${this.size}px monospace`;
+        ctx.fillText(this.char, this.x, this.y);
+        ctx.restore();
+    }
+}
 
 function load() {
     Object.keys(ASSETS).forEach(key => {
@@ -75,7 +103,6 @@ function load() {
             imgCache[key] = new Image(); imgCache[key].src = ASSETS[key];
         }
     });
-    // Load Loot Images
     LOOT_ASSETS.forEach(src => {
         let i = new Image(); i.src = src; imgCache.loot.push(i);
     });
@@ -104,8 +131,7 @@ function drawMatrix() {
 }
 
 function resize() { 
-    canvas.width = window.innerWidth; 
-    canvas.height = window.innerHeight;
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
     floorY = canvas.height - GROUND_Y_OFFSET;
     initMatrix();
 }
@@ -121,9 +147,7 @@ function spawn() {
         const isLoot = Math.random() > 0.4;
         const lootIdx = Math.floor(Math.random() * LOOT_ASSETS.length);
         gameObjects.push({
-            x: canvas.width + 100, 
-            y: floorY - 80, 
-            w: 80, h: 80,
+            x: canvas.width + 100, y: floorY - 85, w: 85, h: 85,
             type: isLoot ? 'tech' : 'obstacle',
             img: isLoot ? imgCache.loot[lootIdx] : imgCache.obstacles[0]
         });
@@ -152,9 +176,7 @@ function draw() {
         }
     });
 
-    ctx.globalCompositeOperation = "screen"; 
-    drawMatrix();
-    ctx.globalCompositeOperation = "source-over"; 
+    ctx.globalCompositeOperation = "screen"; drawMatrix(); ctx.globalCompositeOperation = "source-over"; 
 
     backgroundProps.forEach((p, i) => {
         p.x -= 4; 
@@ -181,6 +203,11 @@ function loop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     draw();
 
+    particles.forEach((p, index) => {
+        p.update(); p.draw();
+        if (p.life <= 0) particles.splice(index, 1);
+    });
+
     if (gameState === 'PLAYING') {
         frame++; spawn();
         jumpHeight -= yVelocity; yVelocity += gravity;
@@ -193,9 +220,15 @@ function loop() {
 
         gameObjects.forEach((obj, i) => {
             obj.x -= gameSpeed;
-            if (obj.x < 160 && obj.x > 80 && jumpHeight < 60) {
-                if (obj.type === 'tech') { score += 100; gameObjects.splice(i, 1); }
-                else { triggerBSOD(); }
+            if (obj.x < 160 && obj.x > 80 && jumpHeight < 65) {
+                if (obj.type === 'tech') {
+                    score += 100;
+                    const pColor = `hsla(${dimensionHue + 120}, 100%, 50%, 1)`;
+                    for(let j=0; j<12; j++) particles.push(new Particle(obj.x + 40, obj.y + 40, pColor));
+                    particles.push(new Particle(obj.x, obj.y, "#fff", "+100"));
+                    shake = 8;
+                    gameObjects.splice(i, 1);
+                } else { triggerBSOD(); }
             }
             if (obj.img && obj.img.complete) {
                 ctx.save();
