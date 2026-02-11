@@ -3,126 +3,213 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Maximum Reality: Cyber Alley Fixed</title>
+    <title>Maximum Reality: Dimensions</title>
     <style>
-        /* 1. THE FOUNDATION */
-        body, html {
-            margin: 0; padding: 0;
-            width: 100%; height: 100%;
-            overflow: hidden; background: #111;
+        body { 
+            margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', Courier, monospace;
+            position: fixed; width: 100%; height: 100%;
+            -webkit-user-select: none; user-select: none;
         }
-
-        /* 2. THE BACKGROUND STACK */
-        #game-viewport {
-            position: relative;
-            width: 100vw; height: 100vh;
-            background: url('gg-bg.png') center bottom no-repeat;
-            background-size: cover;
-            z-index: 0; /* Base Layer */
+        #gameCanvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; touch-action: none; }
+        .ui-layer {
+            position: absolute; top: 0; width: 100%; text-align: left;
+            color: #0ff; text-shadow: 0 0 10px #0ff; pointer-events: none;
+            padding: 20px; z-index: 100;
         }
-
-        /* 3. PARALLAX CITY LAYERS */
-        .city-layer {
-            position: absolute;
-            bottom: 0; left: 0;
-            width: 200%; height: 100%;
-            pointer-events: none; /* Buildings don't block clicks */
-        }
-
-        /* Layer C: Deep Background (Slowest) */
-        #layer-c-container { z-index: 1; opacity: 0.3; }
-        /* Layer B: Mid-ground */
-        #layer-b-container { z-index: 2; opacity: 0.6; }
-        /* Layer A: Close-ground (Fastest) */
-        #layer-a-container { z-index: 3; }
-
-        /* Building styling */
-        .building {
-            position: absolute;
-            bottom: 15vh;
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: bottom;
-        }
-        
-        /* 4. THE PLAYABLE ZONE */
-        #floor {
-            position: absolute; bottom: 0;
-            width: 100%; height: 18vh;
-            background: url('floor.png') repeat-x;
-            background-size: contain;
-            z-index: 10; /* Above all buildings */
-        }
-
-        #lori-hero {
-            position: absolute; bottom: 10vh; left: 10vw;
-            height: 45vh; z-index: 20; /* Front and center */
-        }
-
-        #azul-runner {
-            position: absolute; bottom: 12vh; left: 30vw;
-            width: 100px; height: 100px;
-            z-index: 21;
-            background-size: contain;
-            animation: azul-run 0.5s steps(1) infinite;
-        }
-
-        @keyframes azul-run {
-            0% { background-image: url('Azul-run.png'); }
-            33% { background-image: url('Azul-run2.png'); }
-            66% { background-image: url('Azul-run3.png'); }
-            100% { background-image: url('Azul-run.png'); }
+        #scoreDisplay { font-size: 24px; font-weight: bold; }
+        .crt-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+            background-size: 100% 4px; pointer-events: none; z-index: 10;
         }
     </style>
 </head>
 <body>
-
-<div id="game-viewport">
-    <div id="layer-c-container" class="city-layer"></div>
-    <div id="layer-b-container" class="city-layer"></div>
-    <div id="layer-a-container" class="city-layer"></div>
-
-    <img src="Banner.PNG" style="position:absolute; top:0; width:100%; z-index:100;">
-    <div id="floor"></div>
-    <img src="lori-suit.png" id="lori-hero">
-    <div id="azul-runner"></div>
-</div>
+    <div class="crt-overlay"></div>
+    <div class="ui-layer">
+        <div id="scoreDisplay">DIMENSION: 0</div>
+        <div id="status">MOCHKIL HACK DETECTED...</div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
 
 <script>
-    const containers = {
-        'a': document.getElementById('layer-a-container'),
-        'b': document.getElementById('layer-b-container'),
-        'c': document.getElementById('layer-c-container')
-    };
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-    const heights = { 'a': '35vh', 'b': '55vh', 'c': '75vh' };
-    const speeds = { 'a': 6, 'b': 3, 'c': 1 };
+// ASSET BASE (Using your dimension assets)
+const ASSETS = {
+    bg: 'gg-bg.png',
+    floor: 'floor.png',
+    lori: 'lori-suit.png',
+    azul: ['Azul-run.png', 'Azul-run2.png', 'Azul-run3.png'],
+    buildings: ['building-a.png', 'building-b.png', 'building-c.png'],
+    snacks: ['mochkil-burger.png', 'pink-donut.png', 'taco.png', 'hotdog.png', 'chips.png'],
+    obstacles: ['cardboard_tank.png', 'dumpster.png', 'litter-box.png']
+};
 
-    function spawnBuilding(type) {
-        const b = document.createElement('div');
-        b.className = 'building';
-        b.style.backgroundImage = `url('building-${type}.png')`;
-        b.style.height = heights[type];
-        b.style.width = '250px';
-        b.style.right = '-300px';
-        
-        containers[type].appendChild(b);
+let gameState = 'START';
+let score = 0;
+let frame = 0;
+let gameSpeed = 6;
+let jumpHeight = 0;
+let yVelocity = 0;
+const gravity = 1.0;
 
-        let pos = -300;
-        const move = setInterval(() => {
-            pos += speeds[type];
-            b.style.right = pos + 'px';
-            if (pos > window.innerWidth + 400) {
-                clearInterval(move);
-                b.remove();
-            }
-        }, 16);
+// Load images
+const imgCache = {};
+function loadAssets() {
+    Object.keys(ASSETS).forEach(key => {
+        if (Array.isArray(ASSETS[key])) {
+            imgCache[key] = ASSETS[key].map(src => {
+                const img = new Image(); img.src = src; return img;
+            });
+        } else {
+            imgCache[key] = new Image(); imgCache[key].src = ASSETS[key];
+        }
+    });
+}
+loadAssets();
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+class Entity {
+    constructor(x, y, w, h, type) {
+        this.x = x; this.y = y; this.w = w; this.h = h; this.type = type;
+        this.active = true;
+    }
+}
+
+let gameObjects = [];
+
+function spawnObject() {
+    const isSnack = Math.random() > 0.5;
+    const pool = isSnack ? ASSETS.snacks : ASSETS.obstacles;
+    const file = pool[Math.floor(Math.random() * pool.length)];
+    const img = new Image(); img.src = file;
+    
+    gameObjects.push({
+        x: canvas.width + 100,
+        y: canvas.height - 180,
+        w: 60, h: 60,
+        img: img,
+        type: isSnack ? 'snack' : 'obstacle'
+    });
+}
+
+function drawBackground() {
+    // 1. Sky/Gray Background
+    if (imgCache.bg.complete) {
+        ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
     }
 
-    // Synchronized city spawn
-    setInterval(() => spawnBuilding('c'), 4500);
-    setInterval(() => spawnBuilding('b'), 3000);
-    setInterval(() => spawnBuilding('a'), 2000);
+    // 2. Parallax Buildings (Layered correctly C -> B -> A)
+    const layers = [
+        { img: imgCache.buildings[2], speed: 0.5, opacity: 0.3, h: 0.8 }, // C
+        { img: imgCache.buildings[1], speed: 1.5, opacity: 0.6, h: 0.6 }, // B
+        { img: imgCache.buildings[0], speed: 3.0, opacity: 1.0, h: 0.4 }  // A
+    ];
+
+    layers.forEach(l => {
+        if (l.img && l.img.complete) {
+            let xPos = -(frame * l.speed) % canvas.width;
+            ctx.globalAlpha = l.opacity;
+            ctx.drawImage(l.img, xPos, canvas.height - (canvas.height * l.h) - 100, canvas.width, canvas.height * l.h);
+            ctx.drawImage(l.img, xPos + canvas.width, canvas.height - (canvas.height * l.h) - 100, canvas.width, canvas.height * l.h);
+        }
+    });
+    ctx.globalAlpha = 1.0;
+
+    // 3. Floor
+    if (imgCache.floor.complete) {
+        let fX = -(frame * gameSpeed) % 100;
+        for (let i = 0; i < (canvas.width / 100) + 2; i++) {
+            ctx.drawImage(imgCache.floor, fX + (i * 100), canvas.height - 100, 100, 100);
+        }
+    }
+}
+
+function update() {
+    if (gameState !== 'PLAYING') return;
+    
+    frame++;
+    if (frame % 100 === 0) spawnObject();
+
+    // Jumping physics
+    jumpHeight -= yVelocity;
+    yVelocity += gravity;
+    if (jumpHeight <= 0) { jumpHeight = 0; yVelocity = 0; }
+
+    gameObjects.forEach((obj, i) => {
+        obj.x -= gameSpeed;
+        // Collision
+        if (obj.x < 300 && obj.x > 100 && jumpHeight < 50) {
+            if (obj.type === 'snack') {
+                score += 100;
+                gameObjects.splice(i, 1);
+                document.getElementById('status').innerText = "SNACK ACQUIRED!";
+            } else {
+                gameState = 'GAMEOVER';
+            }
+        }
+        if (obj.x < -100) gameObjects.splice(i, 1);
+    });
+
+    document.getElementById('scoreDisplay').innerText = `DIMENSION: ${score}`;
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawBackground();
+
+    // Draw Lori (Floating/Static Commander)
+    if (imgCache.lori.complete) {
+        let hover = Math.sin(frame * 0.05) * 10;
+        ctx.drawImage(imgCache.lori, 50, canvas.height - 350 + hover, 150, 250);
+    }
+
+    // Draw Azul (Running)
+    const azulFrame = Math.floor(frame / 8) % 3;
+    const azulImg = imgCache.azul[azulFrame];
+    if (azulImg && azulImg.complete) {
+        ctx.drawImage(azulImg, 220, canvas.height - 180 - jumpHeight, 80, 80);
+    }
+
+    // Draw Obstacles/Snacks
+    gameObjects.forEach(obj => {
+        if (obj.img.complete) ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+    });
+
+    if (gameState !== 'PLAYING') {
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.fillRect(0,0,canvas.width, canvas.height);
+        ctx.fillStyle = "#0ff";
+        ctx.textAlign = "center";
+        ctx.font = "30px Courier";
+        ctx.fillText(gameState === 'START' ? "TAP TO ENTER DIMENSION" : "DIMENSION COLLAPSED", canvas.width/2, canvas.height/2);
+    }
+}
+
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+window.addEventListener('touchstart', () => {
+    if (gameState !== 'PLAYING') {
+        gameState = 'PLAYING';
+        score = 0; gameObjects = []; frame = 0;
+    } else if (jumpHeight === 0) {
+        yVelocity = -18;
+    }
+});
+
+loop();
 </script>
 </body>
 </html>
