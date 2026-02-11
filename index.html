@@ -3,27 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Maximum Reality: Dimensions Fixed</title>
+    <title>Maximum Reality: Grounded</title>
     <style>
         :root { --glitch-color: rgba(0, 255, 255, 0.05); }
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
-            overflow: hidden; background: #1a1a1a; /* Matches your gray city vibe */
+            overflow: hidden; background: #1a1a1a;
             -webkit-user-select: none; touch-action: none;
         }
         #gameCanvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
         .ui-layer {
-            position: absolute; top: env(safe-area-inset-top); width: 100%;
+            position: absolute; top: env(safe-area-inset-top); left: 20px;
             color: #0ff; font-family: 'Courier New', monospace;
-            padding: 20px; z-index: 100; pointer-events: none;
-            text-shadow: 0 0 8px #0ff;
+            z-index: 100; pointer-events: none; text-shadow: 0 0 8px #0ff;
         }
     </style>
 </head>
 <body>
     <div class="ui-layer">
         <div id="score">DIMENSION: 0</div>
-        <div id="status">AZUL CONNECTED...</div>
+        <div id="status">AZUL ONLINE...</div>
     </div>
     <canvas id="gameCanvas"></canvas>
 
@@ -31,24 +30,23 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- CONFIGURATION ---
-const GROUND_HEIGHT = 100; // Height of floor.png
-let GROUND_Y; // Calculated on resize
+// --- THE ANCHOR ---
+const GROUND_Y_OFFSET = 80; // Pixels from the very bottom
+let floorY;
+
 const ASSETS = {
     bg: 'gg-bg.png',
     floor: 'floor.png',
     azul: ['Azul-doll.png', 'Azul-doll2.png', 'Azul-doll3.png', 'Azul-doll4.png'],
     buildings: ['building-a.png', 'building-b.png', 'building-c.png'],
     loriBlur: 'lori-blur.png',
-    portal: 'snack-portal.png',
     snacks: ['mochkil-burger.png', 'taco.png'],
-    obstacles: ['cardboard_tank.png', 'dumpster.png']
+    obstacles: ['dumpster.png']
 };
 
 let gameState = 'START', score = 0, frame = 0, gameSpeed = 7;
 let jumpHeight = 0, yVelocity = 0, shake = 0;
-let isHackerMode = false;
-const gravity = 1.0, imgCache = {};
+const gravity = 1.2, imgCache = {};
 
 function load() {
     Object.keys(ASSETS).forEach(key => {
@@ -64,107 +62,96 @@ load();
 function resize() { 
     canvas.width = window.innerWidth; 
     canvas.height = window.innerHeight;
-    GROUND_Y = canvas.height - GROUND_HEIGHT;
+    floorY = canvas.height - GROUND_Y_OFFSET;
 }
 window.addEventListener('resize', resize); resize();
 
 let gameObjects = [], backgroundProps = [];
 
 function spawn() {
-    // Spawn Lori-Blur Rift (Locked to ground)
-    if (Math.random() > 0.99) {
+    // Spawn the SINGLE Lori-Blur asset
+    if (Math.random() > 0.992) {
         backgroundProps.push({ 
             x: canvas.width + 200, 
-            y: GROUND_Y - 300, // Anchored to floor
-            w: 220, h: 320, 
-            type: 'rift', passed: false 
+            y: floorY - 320, 
+            w: 200, h: 320, 
+            passed: false 
         });
     }
     
-    // Spawn Snacks/Obstacles
-    if (frame % 80 === 0) {
-        const isSnack = Math.random() > 0.6;
-        const type = isSnack ? 'snack' : 'obstacle';
-        const imgSet = isSnack ? imgCache.snacks : imgCache.obstacles;
+    if (frame % 90 === 0) {
+        const isSnack = Math.random() > 0.7;
         gameObjects.push({
             x: canvas.width + 100, 
-            y: GROUND_Y - 60, // Sits exactly on top of floor
+            y: floorY - 60, 
             w: 60, h: 60,
-            type: type,
-            img: imgSet[Math.floor(Math.random() * imgSet.length)]
+            type: isSnack ? 'snack' : 'obstacle',
+            img: isSnack ? imgCache.snacks[0] : imgCache.obstacles[0]
         });
     }
 }
 
-function drawWorld() {
-    // 1. Background
+function draw() {
+    // 1. Static BG
     if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = document.documentElement.style.getPropertyValue('--glitch-color');
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // 2. Parallax Buildings (Locked to GROUND_Y)
+    // 2. Parallax Buildings (Pinned to Floor)
     const layers = [
         {img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 500}, 
         {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 400}, 
-        {img: imgCache.buildings[0], s: 3, op: 0.7, h: 300}
+        {img: imgCache.buildings[0], s: 3, op: 0.6, h: 300}
     ];
-    
     layers.forEach(l => {
-        if (!l.img.complete) return;
-        let x = -(frame * l.s) % canvas.width;
-        ctx.globalAlpha = l.op;
-        // Draw buildings so their bottom edge meets the floor
-        ctx.drawImage(l.img, x, GROUND_Y - l.h, canvas.width, l.h);
-        ctx.drawImage(l.img, x + canvas.width, GROUND_Y - l.h, canvas.width, l.h);
+        if (l.img.complete) {
+            let x = -(frame * l.s) % canvas.width;
+            ctx.globalAlpha = l.op;
+            ctx.drawImage(l.img, x, floorY - l.h, canvas.width, l.h);
+            ctx.drawImage(l.img, x + canvas.width, floorY - l.h, canvas.width, l.h);
+        }
     });
     ctx.globalAlpha = 1;
 
-    // 3. Lori-Blur Rifts
+    // 3. The Lori-Blur (The single specter)
     backgroundProps.forEach((p, i) => {
         p.x -= 4; 
         if (imgCache.loriBlur.complete) {
-            ctx.globalAlpha = 0.5 + Math.random() * 0.3;
+            ctx.globalAlpha = 0.6;
             ctx.drawImage(imgCache.loriBlur, p.x, p.y, p.w, p.h);
         }
-        if (!p.passed && p.x < 150) {
-            p.passed = true; shake = 15;
-            document.getElementById('status').innerText = "DIMENSION SHIFT";
-        }
-        if (p.x < -400) backgroundProps.splice(i, 1);
+        if (p.x < -300) backgroundProps.splice(i, 1);
     });
     ctx.globalAlpha = 1;
 
-    // 4. Floor (The Anchor)
+    // 4. THE GROUND (Guaranteed Visible)
     if (imgCache.floor.complete) {
         let fX = -(frame * gameSpeed) % 100;
-        for (let i = 0; i < (canvas.width / 100) + 2; i++) {
-            ctx.drawImage(imgCache.floor, fX + (i * 100), GROUND_Y, 100, GROUND_HEIGHT);
+        for (let i = -1; i < (canvas.width / 100) + 1; i++) {
+            ctx.drawImage(imgCache.floor, (i * 100) + fX, floorY, 100, GROUND_Y_OFFSET);
         }
     }
 }
 
 function loop() {
     ctx.save();
-    if (shake > 0) { ctx.translate(Math.random()*shake, Math.random()*shake); shake *= 0.9; }
+    if (shake > 0) { ctx.translate(Math.random()*shake, Math.random()*shake); shake *= 0.8; }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawWorld();
+    draw();
 
     if (gameState === 'PLAYING') {
         frame++; spawn();
         jumpHeight -= yVelocity; yVelocity += gravity;
         if (jumpHeight <= 0) { jumpHeight = 0; yVelocity = 0; }
 
-        // Azul Run Cycle (sitting on GROUND_Y)
+        // Azul Run Cycle (sitting on floorY)
         const aFrame = Math.floor(frame / 6) % 4;
         if (imgCache.azul[aFrame].complete) {
-            ctx.drawImage(imgCache.azul[aFrame], 100, GROUND_Y - 110 - jumpHeight, 90, 115);
+            // Feet are locked to floorY
+            ctx.drawImage(imgCache.azul[aFrame], 80, floorY - 110 - jumpHeight, 90, 115);
         }
 
-        // Game Objects
         gameObjects.forEach((obj, i) => {
             obj.x -= gameSpeed;
-            // Collision Logic
-            if (obj.x < 180 && obj.x > 80 && jumpHeight < 50) {
+            if (obj.x < 150 && obj.x > 80 && jumpHeight < 40) {
                 if (obj.type === 'snack') { score += 100; gameObjects.splice(i, 1); }
                 else { gameState = 'GAMEOVER'; }
             }
@@ -173,8 +160,8 @@ function loop() {
         });
         document.getElementById('score').innerText = `DIMENSION: ${score}`;
     } else {
-        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0,0,canvas.width, canvas.height);
-        ctx.fillStyle = "#0ff"; ctx.textAlign = "center";
+        ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0,0,canvas.width, canvas.height);
+        ctx.fillStyle = "#0ff"; ctx.textAlign = "center"; ctx.font = "20px Courier";
         ctx.fillText("TAP TO ENTER MAXIMUM REALITY", canvas.width/2, canvas.height/2);
     }
     ctx.restore();
@@ -183,7 +170,7 @@ function loop() {
 
 window.addEventListener('touchstart', (e) => {
     if (gameState !== 'PLAYING') { gameState = 'PLAYING'; score = 0; frame = 0; gameObjects = []; backgroundProps = []; }
-    else if (jumpHeight === 0) yVelocity = -18;
+    else if (jumpHeight === 0) yVelocity = -20;
     e.preventDefault();
 }, {passive: false});
 
