@@ -3,163 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Maximum Reality Arcade</title>
+    <title>Maximum Reality: City Hack</title>
     <style>
         :root {
-            --neon-pink: #ff00ff;
+            --city-tint: rgba(255, 0, 255, 0.2); /* Change this to cast any color */
             --neon-blue: #00ffff;
         }
 
         body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: #000;
-            font-family: 'Courier New', Courier, monospace;
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            overflow: hidden; background: #000;
         }
 
-        /* The Game Stage */
-        #game-container {
-            width: 100vw;
-            height: 100vh;
-            background: url('bg_wp.JPG') no-repeat center center;
-            background-size: cover;
+        #game-stage {
+            width: 100vw; height: 100vh;
             position: relative;
+            /* Gradient Gray Background with a Color Cast */
+            background: linear-gradient(var(--city-tint), var(--city-tint)), url('gg-bg.png');
+            background-size: cover;
+            background-blend-mode: overlay;
         }
 
-        /* Foreground Floor */
-        #floor {
+        /* Layered Building System */
+        .building {
             position: absolute;
-            bottom: 0;
-            width: 100%;
-            height: 15vh;
-            background: url('floor.png') repeat-x;
-            background-size: contain;
-            z-index: 5;
-        }
-
-        /* Lori - The Commander */
-        #lori-hero {
-            position: absolute;
-            bottom: 12vh;
-            left: 5vw;
-            height: 40vh;
-            z-index: 10;
-            filter: drop-shadow(0 0 10px var(--neon-blue));
-        }
-
-        /* Azul - The Quantum Runner */
-        #azul-runner {
-            position: absolute;
-            bottom: 12vh;
-            left: 25vw;
-            width: 80px;
-            height: 80px;
-            background-size: contain;
+            bottom: 15vh;
             background-repeat: no-repeat;
-            z-index: 11;
-            animation: azul-run-cycle 0.5s steps(1) infinite;
+            background-size: contain;
+            background-position: bottom;
         }
 
-        @keyframes azul-run-cycle {
+        /* C is Tallest (Back Layer - Slower) */
+        .layer-c { height: 70vh; width: 300px; z-index: 1; opacity: 0.6; }
+        /* B is Mid (Middle Layer) */
+        .layer-b { height: 50vh; width: 200px; z-index: 2; opacity: 0.8; }
+        /* A is Smallest (Front Layer - Faster) */
+        .layer-a { height: 30vh; width: 150px; z-index: 3; }
+
+        #floor {
+            position: absolute; bottom: 0;
+            width: 100%; height: 15vh;
+            background: url('floor.png') repeat-x;
+            background-size: contain; z-index: 10;
+        }
+
+        #lori-commander {
+            position: absolute; bottom: 12vh; left: 5vw;
+            height: 45vh; z-index: 20;
+        }
+
+        #azul-hacker {
+            position: absolute; bottom: 12vh; left: 28vw;
+            width: 100px; height: 100px;
+            background-size: contain; background-repeat: no-repeat;
+            z-index: 21;
+            animation: azul-run 0.4s steps(1) infinite;
+        }
+
+        @keyframes azul-run {
             0% { background-image: url('Azul-run.png'); }
             33% { background-image: url('Azul-run2.png'); }
             66% { background-image: url('Azul-run3.png'); }
             100% { background-image: url('Azul-run.png'); }
         }
 
-        /* Scenery Items (The Mochkil Hack) */
-        .scenery {
-            position: absolute;
-            bottom: 12vh;
-            height: 60px;
-            z-index: 4;
-            transition: transform 0.1s linear;
-        }
-
-        /* Top Banner */
-        #header-banner {
-            position: absolute;
-            top: 0;
-            width: 100%;
-            z-index: 100;
-        }
-
-        /* UI Overlays */
-        #ui-layer {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            color: var(--neon-blue);
-            text-align: right;
-            z-index: 101;
-            text-shadow: 2px 2px #000;
+        .scenery-prop {
+            position: absolute; bottom: 12vh; height: 50px; z-index: 15;
         }
     </style>
 </head>
 <body>
 
-<div id="game-container">
-    <img src="Banner.PNG" id="header-banner" alt="Maximum Reality">
+<div id="game-stage">
+    <img src="Banner.PNG" style="position:absolute; top:0; width:100%; z-index:100;">
     
-    <div id="ui-layer">
-        <h2 id="status">STATUS: SYSTEM ACTIVE</h2>
-        <p>HACKER: MOCHKIL</p>
-    </div>
-
     <div id="floor"></div>
-    
-    <img src="lori-suit.png" id="lori-hero">
-
-    <div id="azul-runner"></div>
+    <img src="lori-suit.png" id="lori-commander">
+    <div id="azul-hacker"></div>
 </div>
 
 <script>
-    const container = document.getElementById('game-container');
-    const sceneryAssets = [
-        'building-a.png', 'building-b.png', 'building-c.png', 
-        'dumpster.png', 'litter-box.png', 'cardboard_tank.png',
-        'mochkil-burger.png', 'pink-donut.png', 'whiskerbytes.png'
-    ];
+    const stage = document.getElementById('game-stage');
 
-    function spawnScenery() {
-        const item = document.createElement('img');
-        const asset = sceneryAssets[Math.floor(Math.random() * sceneryAssets.length)];
-        
-        item.src = asset;
-        item.className = 'scenery';
-        item.style.right = '-150px';
-        
-        // Randomize size slightly for depth
-        const scale = 0.8 + Math.random() * 0.5;
-        item.style.transform = `scale(${scale})`;
-        
-        container.appendChild(item);
+    function createBuilding(type) {
+        const b = document.createElement('div');
+        b.className = `building layer-${type}`;
+        b.style.backgroundImage = `url('building-${type}.png')`;
+        b.style.right = '-400px';
+        stage.appendChild(b);
 
-        let pos = -150;
-        const speed = 4 + Math.random() * 3; // Random speed for chaos
+        let pos = -400;
+        // Parallax speeds: A is fastest, C is slowest
+        const speeds = { 'a': 6, 'b': 4, 'c': 2 };
+        const speed = speeds[type];
 
         const move = setInterval(() => {
             pos += speed;
-            item.style.right = pos + 'px';
-
-            if (pos > window.innerWidth + 200) {
+            b.style.right = pos + 'px';
+            if (pos > window.innerWidth + 400) {
                 clearInterval(move);
-                item.remove();
+                b.remove();
             }
         }, 16);
     }
 
-    // Start the chaos
-    setInterval(spawnScenery, 1500);
+    function spawnProp() {
+        const props = ['dumpster.png', 'litter-box.png', 'cardboard_tank.png', 'mochkil-burger.png'];
+        const p = document.createElement('img');
+        p.src = props[Math.floor(Math.random() * props.length)];
+        p.className = 'scenery-prop';
+        p.style.right = '-100px';
+        stage.appendChild(p);
 
-    // Subtle Glitch Effect on UI
+        let pos = -100;
+        const move = setInterval(() => {
+            pos += 8; // Props move fastest for ground-level speed feel
+            p.style.right = pos + 'px';
+            if (pos > window.innerWidth + 200) { clearInterval(move); p.remove(); }
+        }, 16);
+    }
+
+    // Spawn buildings at different rates to maintain layers
+    setInterval(() => createBuilding('c'), 4000);
+    setInterval(() => createBuilding('b'), 3000);
+    setInterval(() => createBuilding('a'), 2000);
+    setInterval(spawnProp, 1500);
+
+    // Randomly change the city tint to show "The Hack"
     setInterval(() => {
-        const status = document.getElementById('status');
-        status.style.color = Math.random() > 0.9 ? '#ff00ff' : '#00ffff';
-    }, 200);
+        const colors = ['rgba(255,0,255,0.2)', 'rgba(0,255,255,0.2)', 'rgba(255,255,0,0.1)'];
+        document.documentElement.style.setProperty('--city-tint', colors[Math.floor(Math.random()*colors.length)]);
+    }, 5000);
 </script>
 
 </body>
