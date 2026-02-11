@@ -7,47 +7,22 @@
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; -webkit-user-select: none; touch-action: none; }
         #gameCanvas { display: block; width: 100vw; height: 100vh; background: #000; }
-        
-        .ui-layer {
-            position: absolute; top: env(safe-area-inset-top); left: 20px;
-            color: #0ff; font-family: 'Courier New', monospace;
-            z-index: 100; pointer-events: none; text-shadow: 0 0 8px #0ff;
-        }
+        .ui-layer { position: absolute; top: env(safe-area-inset-top); left: 20px; color: #0ff; font-family: 'Courier New', monospace; z-index: 100; pointer-events: none; text-shadow: 0 0 8px #0ff; }
         #score { font-size: 24px; font-weight: bold; }
         #multiplier { font-size: 16px; color: #fff; }
-        
-        .controls {
-            position: absolute; top: env(safe-area-inset-top); right: 20px;
-            display: flex; gap: 15px; z-index: 150;
-        }
-        .btn { 
-            font-size: 24px; background: rgba(0, 255, 255, 0.15); border: 1.5px solid #0ff; 
-            border-radius: 8px; padding: 8px; color: #0ff; cursor: pointer;
-            backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
-        }
+        .controls { position: absolute; top: env(safe-area-inset-top); right: 20px; display: flex; gap: 15px; z-index: 150; }
+        .btn { font-size: 24px; background: rgba(0, 255, 255, 0.15); border: 1.5px solid #0ff; border-radius: 8px; padding: 8px; color: #0ff; cursor: pointer; backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0, 255, 255, 0.3); }
         .home-btn { text-decoration: none; }
-
-        #bsod {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #0000aa; color: #fff; font-family: 'Courier New';
-            display: none; z-index: 200; padding: 50px; box-sizing: border-box;
-        }
+        #bsod { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0000aa; color: #fff; font-family: 'Courier New'; display: none; z-index: 200; padding: 50px; box-sizing: border-box; }
     </style>
 </head>
 <body>
-    <div id="bsod">
-        <h1>:(</h1>
-        <p>CRITICAL_DIMENSION_ERROR</p>
-        <p>REBOOTING SIMULATION...</p>
-    </div>
-
+    <div id="bsod"><h1>:(</h1><p>CRITICAL_DIMENSION_ERROR</p><p>REBOOTING SIMULATION...</p></div>
     <div class="controls">
         <a href="https://MaximumReality.xyz" class="btn home-btn">🏠</a>
         <div id="muteBtn" class="btn">🔊</div>
         <div id="pauseBtn" class="btn">⏯️</div>
     </div>
-
     <div class="ui-layer">
         <div id="score">DIMENSION: 0</div>
         <div id="multiplier">COMBO: X1</div>
@@ -128,16 +103,6 @@ function resize() {
     initMatrix();
 }
 
-document.getElementById('muteBtn').addEventListener('touchstart', (e) => {
-    e.stopPropagation(); isMuted = !isMuted;
-    bgMusic.muted = isMuted; document.getElementById('muteBtn').innerText = isMuted ? '🔇' : '🔊';
-}, {passive: false});
-
-document.getElementById('pauseBtn').addEventListener('touchstart', (e) => {
-    e.stopPropagation(); isPaused = !isPaused;
-    document.getElementById('pauseBtn').style.borderColor = isPaused ? '#ff0' : '#0ff';
-}, {passive: false});
-
 function resetGame() {
     score = 0; combo = 1; frame = 0; gameSpeed = 7;
     lastPortalMilestone = 0; portalActive = false;
@@ -175,38 +140,30 @@ function drawBackground() {
     if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
 
     if (currentZone === 'CYBER') {
-        // LORI DEITY LAYER (Furthest back)
         if (imgCache.loriBlur.complete) {
-            ctx.save();
-            ctx.globalAlpha = 0.4;
+            ctx.save(); ctx.globalAlpha = 0.4;
             let lX = -(frame * 0.5) % canvas.width;
             ctx.drawImage(imgCache.loriBlur, lX, 0, canvas.width, canvas.height);
             ctx.drawImage(imgCache.loriBlur, lX + canvas.width, 0, canvas.width, canvas.height);
             ctx.restore();
         }
 
-        // BUILDINGS
-        const layers = [
-            {img: imgCache.buildings[2], s: 0.8, op: 0.3, h: 550}, 
-            {img: imgCache.buildings[1], s: 2.0, op: 0.5, h: 450}, 
-            {img: imgCache.buildings[0], s: 4.0, op: 0.7, h: 350}
-        ];
+        const layers = [{img: imgCache.buildings[2], s: 0.8, op: 0.3, h: 550}, {img: imgCache.buildings[1], s: 2.0, op: 0.5, h: 450}, {img: imgCache.buildings[0], s: 4.0, op: 0.7, h: 350}];
         layers.forEach(l => {
             if (l.img.complete) {
-                ctx.save();
-                let x = -(frame * l.s) % canvas.width;
-                ctx.globalAlpha = l.op;
-                ctx.filter = `hue-rotate(${dimensionHue}deg)`;
+                ctx.save(); let x = -(frame * l.s) % canvas.width;
+                ctx.globalAlpha = l.op; ctx.filter = `hue-rotate(${dimensionHue}deg)`;
                 ctx.drawImage(l.img, x, floorY - l.h, canvas.width, l.h);
                 ctx.drawImage(l.img, x + canvas.width, floorY - l.h, canvas.width, l.h);
                 ctx.restore();
             }
         });
 
-        // MATRIX RAIN
+        // RAINBOW MATRIX RAIN
         ctx.save();
-        ctx.fillStyle = "rgba(0, 255, 255, 0.8)";
+        ctx.fillStyle = `hsl(${(frame * 2) % 360}, 100%, 60%)`;
         ctx.font = "bold 18px monospace";
+        ctx.shadowBlur = 10; ctx.shadowColor = `hsl(${(frame * 2) % 360}, 100%, 50%)`;
         drops.forEach((y, i) => {
             ctx.fillText(Math.random() > 0.5 ? "1" : "0", i * 20, y * 20);
             if (y * 20 > canvas.height && Math.random() > 0.975) drops[i] = 0;
@@ -224,11 +181,16 @@ function drawBackground() {
         }
     }
 
+    // SOLID BLACK GROUND (Azure's feet are safe!)
     if (imgCache.floor.complete) {
         let fX = -(frame * gameSpeed * timeScale) % 100;
+        ctx.save();
+        ctx.fillStyle = "#000"; 
+        ctx.fillRect(0, floorY, canvas.width, GROUND_Y_OFFSET);
         for (let i = -1; i < (canvas.width / 100) + 2; i++) {
             ctx.drawImage(imgCache.floor, (i * 100) + fX, floorY, 100, GROUND_Y_OFFSET);
         }
+        ctx.restore();
     }
 }
 
@@ -243,11 +205,7 @@ function loop() {
     particles.forEach((p, i) => { p.update(); p.draw(); if (p.life <= 0) particles.splice(i, 1); });
 
     if (gameState === 'PLAYING') {
-    if (score > highScore) {
-    highScore = score;
-    localStorage.setItem('maxRealityHighScore', highScore);
-    dimensionHue += 0.2; 
-}
+        if (score > highScore) { highScore = score; localStorage.setItem('maxRealityHighScore', highScore); dimensionHue += 0.2; }
         frame++; spawn();
         jumpHeight -= yVelocity * timeScale;
         yVelocity += gravity * timeScale;
@@ -262,18 +220,14 @@ function loop() {
         gameObjects.forEach((obj, i) => {
             obj.x -= gameSpeed * timeScale;
             if (obj.type === 'portal') {
-    if (obj.x < 400 && obj.x > 160) {
-        timeScale = 0.4;
-    } else if (timeScale !== 1.0) {
-        timeScale = 1.0;
-    }
-}
+                if (obj.x < 400 && obj.x > 160) timeScale = 0.4;
+                else if (timeScale !== 1.0) timeScale = 1.0;
+            }
 
             const hitboxH = (obj.type === 'tech') ? 75 : 60;
             if (obj.x < 160 && obj.x > 80 && jumpHeight < hitboxH) {
                 if (obj.type === 'portal') {
-                    shake = 25;
-                    dimensionHue += 90;
+                    shake = 25; dimensionHue += 90;
                     for(let j=0; j<30; j++) particles.push(new Particle(obj.x, obj.y, "#fff"));
                     currentZone = (currentZone === 'CYBER') ? 'SNACK' : 'CYBER';
                     gameSpeed = (currentZone === 'SNACK') ? 12 : 7;
@@ -307,6 +261,10 @@ function loop() {
     ctx.restore();
     requestAnimationFrame(loop);
 }
+
+// UI Handlers
+document.getElementById('muteBtn').addEventListener('touchstart', (e) => { e.stopPropagation(); isMuted = !isMuted; bgMusic.muted = isMuted; document.getElementById('muteBtn').innerText = isMuted ? '🔇' : '🔊'; }, {passive: false});
+document.getElementById('pauseBtn').addEventListener('touchstart', (e) => { e.stopPropagation(); isPaused = !isPaused; document.getElementById('pauseBtn').style.borderColor = isPaused ? '#ff0' : '#0ff'; }, {passive: false});
 
 window.addEventListener('touchstart', (e) => {
     if (e.target.closest('.btn')) return;
