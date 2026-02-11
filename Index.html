@@ -6,22 +6,28 @@
     <title>Maximum Reality: Binary Infinity</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; -webkit-user-select: none; touch-action: none; }
-        #gameCanvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
+        #gameCanvas { display: block; width: 100vw; height: 100vh; background: #000; }
+        
+        /* UI HUD */
         .ui-layer {
             position: absolute; top: env(safe-area-inset-top); left: 20px;
             color: #0ff; font-family: 'Courier New', monospace;
             z-index: 100; pointer-events: none; text-shadow: 0 0 8px #0ff;
         }
-        #score { font-size: 24px; font-weight: bold; transition: transform 0.1s; }
-        #highScore { font-size: 14px; opacity: 0.8; }
+        #score { font-size: 24px; font-weight: bold; }
+        #multiplier { font-size: 16px; color: #fff; }
         
-        /* NEW RECORD PULSE */
-        @keyframes pulseRecord { 
-            0% { transform: scale(1); color: #0ff; text-shadow: 0 0 5px #0ff; }
-            50% { transform: scale(1.1); color: #fff; text-shadow: 0 0 20px #fff, 0 0 30px #0ff; }
-            100% { transform: scale(1); color: #0ff; text-shadow: 0 0 5px #0ff; }
+        /* INTERACTIVE CONTROLS */
+        .controls {
+            position: absolute; top: env(safe-area-inset-top); right: 20px;
+            display: flex; gap: 15px; z-index: 150;
         }
-        .new-record-anim { animation: pulseRecord 0.6s infinite; }
+        .btn { 
+            font-size: 24px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; 
+            border-radius: 8px; padding: 5px 10px; color: #0ff; cursor: pointer;
+            backdrop-filter: blur(5px);
+        }
+        .home-btn { text-decoration: none; display: flex; align-items: center; justify-content: center; }
 
         #bsod {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -36,11 +42,17 @@
         <p>CRITICAL_DIMENSION_ERROR</p>
         <p>REBOOTING SIMULATION...</p>
     </div>
+
+    <div class="controls">
+        <a href="https://MaximumReality.xyz" class="btn home-btn">🏠</a>
+        <div id="muteBtn" class="btn">🔊</div>
+        <div id="pauseBtn" class="btn">⏯️</div>
+    </div>
+
     <div class="ui-layer">
         <div id="score">DIMENSION: 0</div>
         <div id="multiplier">X1</div>
         <div id="highScore">BEST: 0</div>
-        <div id="status">AZUL_ACTIVE...</div>
     </div>
     <canvas id="gameCanvas"></canvas>
 
@@ -50,9 +62,10 @@ const ctx = canvas.getContext('2d');
 const bgMusic = new Audio('password-infinity.mp3');
 bgMusic.loop = true;
 
+let isMuted = false;
+let isPaused = false;
 const GROUND_Y_OFFSET = 100; 
-let floorY;
-let highScore = localStorage.getItem('maxRealityHighScore') || 0;
+let floorY, highScore = localStorage.getItem('maxRealityHighScore') || 0;
 
 const ASSETS = {
     bg: 'gg-bg.png',
@@ -60,7 +73,6 @@ const ASSETS = {
     floor: 'floor.png',
     azul: ['Azul-doll.png', 'Azul-doll2.png', 'Azul-doll3.png', 'Azul-doll4.png'],
     buildings: ['building-a.png', 'building-b.png', 'building-c.png'],
-    loriBlur: 'lori-blur.png',
     obstacles: ['old-pc.png'],
     portal: 'snack-portal.png'
 };
@@ -72,10 +84,29 @@ let gameState = 'START', currentZone = 'CYBER';
 let score = 0, combo = 1, frame = 0, gameSpeed = 7, snackX = 0;
 let lastPortalMilestone = 0, portalActive = false;
 let jumpHeight = 0, yVelocity = 0, shake = 0, dimensionHue = 0;
-let timeScale = 1.0, glitchTimer = 0;
-let coyoteFrames = 0; // Coyote Time counter
+let timeScale = 1.0, coyoteFrames = 0;
 const gravity = 1.2, imgCache = { loot: [], snacks: [] };
-let particles = [], gameObjects = [], backgroundProps = [];
+let gameObjects = [], backgroundProps = [];
+
+// Matrix Setup
+let columns, drops = [];
+function initMatrix() {
+    columns = Math.floor(canvas.width / 20);
+    drops = Array(columns).fill(1);
+}
+
+function drawMatrix() {
+    ctx.save();
+    ctx.fillStyle = `hsla(${dimensionHue + 120}, 100%, 50%, 0.5)`;
+    ctx.font = "bold 18px monospace";
+    for (let i = 0; i < drops.length; i++) {
+        const text = "01"[Math.floor(Math.random() * 2)];
+        ctx.fillText(text, i * 20, drops[i] * 20);
+        if (drops[i] * 20 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+        drops[i]++;
+    }
+    ctx.restore();
+}
 
 function load() {
     Object.keys(ASSETS).forEach(key => {
@@ -93,27 +124,46 @@ load();
 function resize() { 
     canvas.width = window.innerWidth; canvas.height = window.innerHeight;
     floorY = canvas.height - GROUND_Y_OFFSET;
+    initMatrix();
 }
 window.addEventListener('resize', resize); resize();
 
-function toggleZone() {
-    glitchTimer = 20; // Trigger glitch distortion
-    if (currentZone === 'CYBER') {
-        currentZone = 'SNACK'; gameSpeed = 12;
-        document.getElementById('status').innerText = "SNACK ATTACK!";
-    } else {
-        currentZone = 'CYBER'; gameSpeed = 7;
-        document.getElementById('status').innerText = "BACK TO CODE...";
-    }
-    timeScale = 1.0;
-    gameObjects = [];
+// UI CONTROL LOGIC
+document.getElementById('muteBtn').onclick = (e) => {
+    e.stopPropagation();
+    isMuted = !isMuted;
+    bgMusic.muted = isMuted;
+    document.getElementById('muteBtn').innerText = isMuted ? '🔇' : '🔊';
+};
+
+document.getElementById('pauseBtn').onclick = (e) => {
+    e.stopPropagation();
+    isPaused = !isPaused;
+    document.getElementById('pauseBtn').style.color = isPaused ? '#ff0' : '#0ff';
+};
+
+function resetGame() {
+    score = 0; combo = 1; frame = 0; gameSpeed = 7;
+    lastPortalMilestone = 0; portalActive = false;
+    currentZone = 'CYBER'; timeScale = 1.0;
+    gameObjects = []; gameState = 'PLAYING';
+    bgMusic.play().catch(()=>{});
+}
+
+function triggerBSOD() {
+    gameState = 'GAMEOVER';
+    bgMusic.pause();
+    document.getElementById('bsod').style.display = 'block';
+    setTimeout(() => { 
+        document.getElementById('bsod').style.display = 'none'; 
+        resetGame();
+    }, 2500);
 }
 
 function spawn() {
     const milestone = Math.floor(score / 1000) * 1000;
     if (score >= 1000 && milestone > lastPortalMilestone && !portalActive) {
-        lastPortalMilestone = milestone;
-        portalActive = true;
+        lastPortalMilestone = milestone; portalActive = true;
         gameObjects.push({ x: canvas.width + 100, y: floorY - 140, w: 120, h: 140, type: 'portal', img: imgCache.portal });
     }
     
@@ -129,27 +179,26 @@ function spawn() {
     }
 }
 
-function loop() {
-    ctx.save();
-    if (shake > 0) { ctx.translate(Math.random()*shake, Math.random()*shake); shake *= 0.85; }
-    
-    // GLITCH DISTORTION
-    if (glitchTimer > 0) {
-        ctx.translate(Math.sin(frame) * 10, 0);
-        ctx.filter = `hue-rotate(${frame * 10}deg) saturate(3)`;
-        glitchTimer--;
-    }
-
+function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // DRAW BACKGROUNDS
     if (currentZone === 'CYBER') {
         if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
+        const layers = [{img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 550}, {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 450}, {img: imgCache.buildings[0], s: 3, op: 0.6, h: 350}];
+        layers.forEach(l => {
+            if (l.img.complete) {
+                ctx.save(); let x = -(frame * l.s) % canvas.width;
+                ctx.globalAlpha = l.op; ctx.filter = `hue-rotate(${dimensionHue}deg)`;
+                ctx.drawImage(l.img, x, floorY - l.h, canvas.width, l.h);
+                ctx.drawImage(l.img, x + canvas.width, floorY - l.h, canvas.width, l.h);
+                ctx.restore();
+            }
+        });
+        drawMatrix();
     } else {
         if (imgCache.snackBG.complete) {
-            const bgWidth = imgCache.snackBG.width;
             const scale = canvas.height / imgCache.snackBG.height;
-            const drawWidth = bgWidth * scale;
+            const drawWidth = imgCache.snackBG.width * scale;
             snackX -= (gameSpeed * 0.5 * timeScale);
             if (snackX <= -drawWidth) snackX = 0;
             ctx.drawImage(imgCache.snackBG, snackX, 0, drawWidth, canvas.height);
@@ -157,72 +206,70 @@ function loop() {
         }
     }
 
+    if (imgCache.floor.complete) {
+        let fX = -(frame * gameSpeed * timeScale) % 100;
+        for (let i = -1; i < (canvas.width / 100) + 2; i++) {
+            ctx.drawImage(imgCache.floor, (i * 100) + fX, floorY, 100, GROUND_Y_OFFSET);
+        }
+    }
+}
+
+function loop() {
+    if (isPaused) { requestAnimationFrame(loop); return; }
+    
+    ctx.save();
+    if (shake > 0) { ctx.translate(Math.random()*shake, Math.random()*shake); shake *= 0.85; }
+    draw();
+
     if (gameState === 'PLAYING') {
         frame++; spawn();
-        
-        // MOVEMENT WITH COYOTE TIME
         jumpHeight -= yVelocity * timeScale;
         yVelocity += gravity * timeScale;
         
-        if (jumpHeight <= 0) {
-            jumpHeight = 0; yVelocity = 0;
-            coyoteFrames = 5; // Give 5 frames of "ghost floor" for jumping
-        } else {
-            coyoteFrames--;
-        }
+        if (jumpHeight <= 0) { jumpHeight = 0; yVelocity = 0; coyoteFrames = 6; } else { coyoteFrames--; }
 
-        // AZUL RENDER
+        // AZUL GLOW LOGIC
+        ctx.save();
+        if (currentZone === 'SNACK') {
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = `hsl(${frame % 360}, 100%, 50%)`; // Rainbow snack glow
+        }
         const aFrame = Math.floor(frame / 6) % 4;
         ctx.drawImage(imgCache.azul[aFrame], 100, floorY - 110 - jumpHeight, 90, 115);
+        ctx.restore();
 
         // OBJECTS
         gameObjects.forEach((obj, i) => {
             obj.x -= gameSpeed * timeScale;
-            
-            // SLOW-MO ON PORTAL ENTRY
-            if (obj.type === 'portal' && obj.x < 400 && obj.x > 160) {
-                timeScale = 0.4; // Enter slow-mo
-            }
+            if (obj.type === 'portal' && obj.x < 400 && obj.x > 160) timeScale = 0.4;
 
-            const hitboxHeight = obj.type === 'tech' ? 70 : 60;
-            if (obj.x < 160 && obj.x > 80 && jumpHeight < hitboxHeight) {
+            const hitboxH = (obj.type === 'tech') ? 75 : 60;
+            if (obj.x < 160 && obj.x > 80 && jumpHeight < hitboxH) {
                 if (obj.type === 'portal') {
-                    toggleZone();
-                    portalActive = false;
-                    gameObjects.splice(i, 1);
-                    return;
-                }
-                if (obj.type === 'tech') {
-                    score += (100 * combo);
-                    combo++;
-                    shake = 8;
-                    gameObjects.splice(i, 1);
+                    currentZone = (currentZone === 'CYBER') ? 'SNACK' : 'CYBER';
+                    gameSpeed = (currentZone === 'SNACK') ? 12 : 7;
+                    timeScale = 1.0; portalActive = false; gameObjects = [];
+                } else if (obj.type === 'tech') {
+                    score += (100 * combo); combo++; shake = 5; gameObjects.splice(i, 1);
                 } else if (currentZone === 'CYBER') {
-                    gameState = 'GAMEOVER'; 
-                    document.getElementById('bsod').style.display = 'block';
-                    setTimeout(() => { document.getElementById('bsod').style.display = 'none'; }, 2000);
+                    triggerBSOD();
                 }
             }
-
             if (obj.x < -150) {
                 if (obj.type === 'portal') portalActive = false;
-                if (obj.type === 'obstacle') combo = 1; // Reset combo if you dodge an obstacle
+                if (obj.type === 'obstacle') combo = 1;
                 gameObjects.splice(i, 1);
             }
             if (obj.img) ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
         });
 
-        // UI UPDATES
-        const scoreEl = document.getElementById('score');
-        scoreEl.innerText = `DIMENSION: ${score}`;
+        document.getElementById('score').innerText = `DIMENSION: ${score}`;
         document.getElementById('multiplier').innerText = `COMBO: X${combo}`;
-        
-        if (score > highScore && highScore > 0) {
-            scoreEl.classList.add('new-record-anim');
-        }
-    } else {
-        ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.fillStyle = "#0ff"; ctx.textAlign = "center"; ctx.fillText("TAP TO START", canvas.width/2, canvas.height/2);
+        document.getElementById('highScore').innerText = `BEST: ${highScore}`;
+    } else if (gameState === 'START') {
+        ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = "#0ff"; ctx.textAlign = "center"; ctx.font = "20px Courier";
+        ctx.fillText("TAP TO START", canvas.width/2, canvas.height/2);
     }
     
     ctx.restore();
@@ -230,12 +277,9 @@ function loop() {
 }
 
 window.addEventListener('touchstart', (e) => {
-    if (gameState !== 'PLAYING') {
-        gameState = 'PLAYING'; score = 0; combo = 1; lastPortalMilestone = 0; portalActive = false; timeScale = 1.0;
-    } else if (jumpHeight === 0 || coyoteFrames > 0) { 
-        yVelocity = -22;
-        coyoteFrames = 0; // Use up the coyote jump
-    }
+    if (isPaused) return;
+    if (gameState === 'START') resetGame();
+    else if (jumpHeight === 0 || coyoteFrames > 0) { yVelocity = -22; coyoteFrames = 0; }
     e.preventDefault();
 }, {passive: false});
 
