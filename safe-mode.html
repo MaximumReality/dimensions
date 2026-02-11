@@ -7,47 +7,25 @@
 <style>
 body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; -webkit-user-select:none; touch-action:none;}
 #gameCanvas { display:block; width:100vw; height:100vh; background:#000; }
-
-.ui-layer {
-    position:absolute; top:env(safe-area-inset-top); left:20px;
-    color:#0ff; font-family:'Courier New', monospace;
-    z-index:100; pointer-events:none; text-shadow:0 0 8px #0ff;
-}
+.ui-layer { position:absolute; top:env(safe-area-inset-top); left:20px; color:#0ff; font-family:'Courier New', monospace; z-index:100; pointer-events:none; text-shadow:0 0 8px #0ff; }
 #score { font-size:24px; font-weight:bold; }
 #highScore { font-size:14px; opacity:0.8; margin-top:5px; }
-
-.controls {
-    position:absolute; top:calc(env(safe-area-inset-top) + 30px); right:20px;
-    display:flex; gap:15px; z-index:150;
-}
-.btn {
-    font-size:24px; background:rgba(0,255,255,0.15); border:1.5px solid #0ff;
-    border-radius:8px; padding:8px; color:#0ff; cursor:pointer;
-    backdrop-filter: blur(5px); display:flex; align-items:center; justify-content:center;
-}
-
-#flash {
-    position:fixed; top:0; left:0; width:100%; height:100%;
-    background:#fff; opacity:0; z-index:250;
-    pointer-events:none;
-    transition:opacity 0.1s;
-}
+.controls { position:absolute; top:calc(env(safe-area-inset-top) + 30px); right:20px; display:flex; gap:15px; z-index:150; }
+.btn { font-size:24px; background:rgba(0,255,255,0.15); border:1.5px solid #0ff; border-radius:8px; padding:8px; color:#0ff; cursor:pointer; backdrop-filter: blur(5px); display:flex; align-items:center; justify-content:center; }
+#flash { position:fixed; top:0; left:0; width:100%; height:100%; background:#fff; opacity:0; z-index:250; pointer-events:none; transition:opacity 0.1s; }
 </style>
 </head>
 <body>
-
 <div class="controls">
     <a href="https://MaximumReality.xyz" class="btn">🏠</a>
     <div id="muteBtn" class="btn">🔊</div>
     <div id="pauseBtn" class="btn">⏯️</div>
 </div>
-
 <div class="ui-layer">
     <div id="score">DIMENSION: 0</div>
     <div id="highScore">BEST: 0</div>
     <div id="status">ZONE: CYBER</div>
 </div>
-
 <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -55,33 +33,39 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 // AUDIO
-const bgMusic = new Audio('password-infinity.mp3'); bgMusic.loop = true;
-const beastModeSfx = new Audio('beast_mode.mp3');
+const bgMusic = new Audio('password-infinity.mp3'); bgMusic.loop=true;
+const beastModeSfx = new Audio('beast_mode.mp3'); beastModeSfx.volume=0.9;
 
 let isMuted=false, isPaused=false, gameState='START';
 let score=0, frame=0, gameSpeed=7, dimensionHue=0;
-let jumpHeight=0, yVelocity=0, shake=0, bonusCount=0;
-let currentZone='CYBER', portalActive=false, beastModePlayed=false;
-const gravity = 1.2, GROUND_Y_OFFSET=100;
+let jumpHeight=0, yVelocity=0, shake=0;
+let currentZone='CYBER', beastModePlayed=false;
+const gravity=1.2, GROUND_Y_OFFSET=100;
 let floorY, highScore=Number(localStorage.getItem('maxRealityHighScore'))||0;
 
 // ASSETS
 const ASSETS={
-    bg:'gg-bg.png', snackBg:'hot-food-c-store-wp.JPG', floor:'floor.png', earthquakeBg:'pompeii-bg.png',
+    cyberBg:'gg-bg.png', snackBg:'hot-food-c-store-wp.JPG', floor:'floor.png', earthquakeBg:'pompeii-bg.png',
     azul:['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
-    buildings:['building-a.png','building-b.png','building-c.png'],
-    loriBlur:'lori-blur.png', portal:'snack-portal.png'
+    buildings:['building-a.png','building-b.png','building-c.png'], loriBlur:'lori-blur.png',
+    portal:'snack-portal.png',
+    rubble:'rubble.png', herc:'herc-bust.png',
+    scroll:'scrolls.png', book:'book.png',
+    pottery:['pottery.png','pottery2.png','pottery3.png','pottery4.png']
 };
+const CYBER_LOOT=['power-supply.png','2tb.png','card.png','core-i7.png','curve-keyboard.png','core-i9.png','cpu-water-cooler.png','optical-drive.png','ram.png','motherboard.png','ssd.png','graphics-card.png','circuitpython.png'];
 const SNACK_LOOT=['bread-slice.png','chips.png','hotdog.png','pink-donut.png','roast-chicken.png','soda.png','taco.png','mochkil-burger.png','mochkil_puffs_orange.png','azulo_blueberry_vanilla.jpg'];
-const imgCache={loot:[]};
+const POMPEII_LOOT=[ASSETS.scroll, ASSETS.book, ...ASSETS.pottery];
+
+const imgCache={loot:[], obstacles:[]};
 
 // PARTICLES
 let particles=[];
 class Particle{
     constructor(x,y,color,text=null,sizeMod=1){
         this.x=x; this.y=y;
-        this.char=text|| (Math.random()>0.5?"0":"1");
-        this.size=(text?28:Math.random()*10+12) * sizeMod;
+        this.char=text||(Math.random()>0.5?"0":"1");
+        this.size=(text?28:Math.random()*10+12)*sizeMod;
         this.speedX=(Math.random()-0.5)*10;
         this.speedY=(Math.random()-0.5)*15;
         this.color=color; this.life=1.0;
@@ -92,49 +76,65 @@ class Particle{
 
 // LOAD IMAGES
 function load(){
-    Object.keys(ASSETS).forEach(key=>{
-        if(Array.isArray(ASSETS[key])){
-            imgCache[key]=ASSETS[key].map(src=>{let i=new Image(); i.src=src; return i;});
-        } else { let i=new Image(); i.src=ASSETS[key]; imgCache[key]=i; }
+    Object.keys(ASSETS).forEach(k=>{
+        if(Array.isArray(ASSETS[k])){
+            imgCache[k]=ASSETS[k].map(src=>{let i=new Image(); i.src=src; return i;});
+        } else { let i=new Image(); i.src=ASSETS[k]; imgCache[k]=i; }
     });
+    CYBER_LOOT.forEach(src=>{ let i=new Image(); i.src=src; imgCache.loot.push(i); });
     SNACK_LOOT.forEach(src=>{ let i=new Image(); i.src=src; imgCache.loot.push(i); });
+    POMPEII_LOOT.forEach(src=>{ let i=new Image(); i.src=src; imgCache.loot.push(i); });
+    imgCache.obstacles=[ASSETS.rubble, ASSETS.herc].map(src=>{ let i=new Image(); i.src=src; return i; });
 }
 load();
 
 // RESIZE
-function resize(){ 
-    canvas.width=window.innerWidth; canvas.height=window.innerHeight;
-    floorY=canvas.height-GROUND_Y_OFFSET;
-}
+function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; floorY=canvas.height-GROUND_Y_OFFSET; }
 resize(); window.addEventListener('resize',resize);
 
 // CONTROLS
-document.getElementById('muteBtn').addEventListener('touchstart', e=>{ e.stopPropagation(); isMuted=!isMuted; bgMusic.muted=isMuted; beastModeSfx.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊';},{passive:false});
-document.getElementById('pauseBtn').addEventListener('touchstart', e=>{ e.stopPropagation(); isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff';},{passive:false});
+document.getElementById('muteBtn').addEventListener('touchstart',e=>{ e.stopPropagation(); isMuted=!isMuted; bgMusic.muted=isMuted; beastModeSfx.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊';},{passive:false});
+document.getElementById('pauseBtn').addEventListener('touchstart',e=>{ e.stopPropagation(); isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff';},{passive:false});
 
-// SPAWNING (obstacle-free)
+// GAME OBJECTS
 let gameObjects=[];
 function spawn(){
-    if(frame%40===0){
-        const lootImg = imgCache.loot[Math.floor(Math.random()*imgCache.loot.length)];
-        gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'tech',img:lootImg});
+    if(currentZone==='CYBER' && frame%40===0){
+        const lootImg=imgCache.loot[Math.floor(Math.random()*CYBER_LOOT.length)];
+        gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'loot',img:lootImg});
     }
-    if(currentZone==='EARTHQUAKE' && frame%3===0){
-        particles.push(new Particle(Math.random()*canvas.width,0,`hsl(20,80%,${40+Math.random()*20}%)`,Math.random()>0.7?'💨':'·',1.5));
+    if(currentZone==='SNACK' && frame%40===0){
+        const lootImg=imgCache.loot[Math.floor(Math.random()*SNACK_LOOT.length)];
+        gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'loot',img:lootImg});
+    }
+    if(currentZone==='EARTHQUAKE'){
+        if(frame%40===0){
+            const lootImg=POMPEII_LOOT[Math.floor(Math.random()*POMPEII_LOOT.length)];
+            gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'loot',img:lootImg});
+        }
+        // Obstacles
+        if(frame%100===0){
+            const obsImg=imgCache.obstacles[Math.floor(Math.random()*imgCache.obstacles.length)];
+            gameObjects.push({x:canvas.width+50,y:floorY-85,w:80,h:80,type:'obstacle',img:obsImg});
+        }
+        if(frame%3===0){
+            particles.push(new Particle(Math.random()*canvas.width,0,`hsl(20,80%,${40+Math.random()*20}%)`,Math.random()>0.7?'💨':'·',1.5));
+        }
     }
 }
 
-// DRAW BACKGROUND PER ZONE
+// BACKGROUND DRAW
+let drops=[];
+function initMatrix(){ drops=Array(Math.floor(canvas.width/20)).fill(1); }
 function drawBackground(){
     if(currentZone==='CYBER'){
-        if(imgCache.bg.complete) ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
+        if(imgCache.cyberBg.complete) ctx.drawImage(imgCache.cyberBg,0,0,canvas.width,canvas.height);
         if(imgCache.loriBlur.complete){ ctx.save(); ctx.globalAlpha=0.4; let lX=-(frame*0.5)%canvas.width; ctx.drawImage(imgCache.loriBlur,lX,0,canvas.width,canvas.height); ctx.drawImage(imgCache.loriBlur,lX+canvas.width,0,canvas.width,canvas.height); ctx.restore(); }
         const layers=[{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
         layers.forEach(l=>{ if(l.img.complete){ ctx.save(); let x=-(frame*l.s)%canvas.width; ctx.globalAlpha=l.op; ctx.filter=`hue-rotate(${dimensionHue}deg)`; ctx.drawImage(l.img,x,floorY-l.h,canvas.width,l.h); ctx.drawImage(l.img,x+canvas.width,floorY-l.h,canvas.width,l.h); ctx.restore(); }});
         // Matrix rain
         ctx.save(); ctx.fillStyle=`hsl(${dimensionHue},100%,60%)`; ctx.font="bold 18px monospace";
-        const drops = Array(Math.floor(canvas.width/20)).fill(1);
-        drops.forEach((y,i)=>{ ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20); });
+        drops.forEach((y,i)=>{ ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20); if(y*20>canvas.height && Math.random()>0.975) drops[i]=0; drops[i]++; });
         ctx.restore();
     }
     else if(currentZone==='SNACK'){
@@ -142,14 +142,11 @@ function drawBackground(){
     }
     else if(currentZone==='EARTHQUAKE'){
         if(imgCache.earthquakeBg.complete){ let x=-((frame*1.8)%canvas.width); ctx.drawImage(imgCache.earthquakeBg,x,0,canvas.width,canvas.height); ctx.drawImage(imgCache.earthquakeBg,x+canvas.width,0,canvas.width,canvas.height); }
-        // Lava tint
         ctx.save(); ctx.globalCompositeOperation='multiply'; ctx.fillStyle=`hsl(${dimensionHue+20},90%,30%)`; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.restore();
-        // Vignette
         const grad = ctx.createRadialGradient(canvas.width/2,canvas.height/2,0,canvas.width/2,canvas.height/2,Math.hypot(canvas.width,canvas.height)/2);
         grad.addColorStop(0,'rgba(0,0,0,0)'); grad.addColorStop(1,'rgba(0,0,0,0.6)');
         ctx.fillStyle=grad; ctx.fillRect(0,0,canvas.width,canvas.height);
     }
-    // Ground
     ctx.fillStyle=(currentZone==='EARTHQUAKE')?'#440':'#222'; ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET);
     if(imgCache.floor.complete){ let fX=-(frame*gameSpeed)%100; for(let i=-1;i<(canvas.width/100)+2;i++) ctx.drawImage(imgCache.floor,(i*100)+fX,floorY,100,GROUND_Y_OFFSET); }
 }
@@ -172,7 +169,6 @@ function loop(){
 
         jumpHeight-=yVelocity; yVelocity+=gravity; if(jumpHeight<=0){ jumpHeight=0; yVelocity=0; }
 
-        // Earthquake shake
         if(currentZone==='EARTHQUAKE') shake=20+Math.sin(frame*0.1)*5;
 
         const aFrame=Math.floor(frame/6)%4;
@@ -180,9 +176,9 @@ function loop(){
 
         for(let i=gameObjects.length-1;i>=0;i--){
             const obj=gameObjects[i]; obj.x-=gameSpeed;
-            if(obj.x<160 && obj.x>80 && obj.type==='tech'){
-                const points=100; score+=points; dimensionHue+=5;
-                particles.push(new Particle(obj.x,obj.y,'#fff','+'+points));
+            if(obj.x<160 && obj.x>80 && obj.type==='loot'){
+                score+=100; dimensionHue+=5;
+                particles.push(new Particle(obj.x,obj.y,'#fff','+100'));
                 gameObjects.splice(i,1);
             }
             if(obj.img) ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
@@ -201,22 +197,22 @@ function loop(){
 window.addEventListener('touchstart', e=>{
     if(e.target.closest('.btn')) return;
     if(gameState!=='PLAYING'){
-        gameState='PLAYING';
-        if(!beastModePlayed){ beastModeSfx.play(); beastModePlayed=true; }
-        bgMusic.play();
+        gameState='PLAYING'; bgMusic.play();
+        if(currentZone==='EARTHQUAKE' && !beastModePlayed){ beastModeSfx.play(); beastModePlayed=true; }
     } else if(jumpHeight===0) yVelocity=-22;
     e.preventDefault();
 },{passive:false});
 
-// AUTO PORTAL CYCLE (safe test mode, no obstacles)
+// PORTAL CYCLE
 setInterval(()=>{
-    if(!gameState==='PLAYING') return;
+    if(gameState!=='PLAYING') return;
     if(currentZone==='CYBER'){ currentZone='SNACK'; gameSpeed=7; }
-    else if(currentZone==='SNACK'){ currentZone='EARTHQUAKE'; gameSpeed=12; if(!beastModePlayed){ beastModeSfx.play(); beastModePlayed=true; } }
+    else if(currentZone==='SNACK'){ currentZone='EARTHQUAKE'; gameSpeed=12; beastModePlayed=false; beastModeSfx.play(); beastModePlayed=true; }
     else { currentZone='CYBER'; gameSpeed=7; beastModePlayed=false; }
-    particles=[]; gameObjects=[];
-},12000); // cycle every 12 seconds
+    particles=[]; gameObjects=[]; initMatrix();
+},12000);
 
+initMatrix();
 loop();
 </script>
 </body>
