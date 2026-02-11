@@ -153,6 +153,7 @@ function resetGame() {
 // SPAWNING
 let gameObjects=[];
 let lastPortalScore=0;
+// SPAWNING (updated)
 function spawn() {
     if(score >= 5000 && score - lastPortalScore >= 5000 && !portalActive){
         portalActive=true; lastPortalScore=score;
@@ -169,6 +170,13 @@ function spawn() {
         gameObjects.push({x:canvas.width+100, y:floorY-85, w:80, h:80, type:'tech', img:lootArr[Math.floor(Math.random()*lootArr.length)]});
     }
 
+    // Cyber obstacle
+    if(currentZone==='CYBER' && frame % 180 === 0){
+        gameObjects.push({x:canvas.width+100, y:floorY-90, w:80, h:80, type:'obstacle', img:new Image()});
+        gameObjects[gameObjects.length-1].img.src='old-pc.png';
+    }
+
+    // Earthquake obstacles
     if(currentZone==='EARTHQUAKE' && frame % 200 === 0){
         let obsArr = imgCache.EARTHQUAKE_OBSTACLES;
         if(obsArr && obsArr.length>0){
@@ -251,6 +259,34 @@ function loop(){
             }
             if(obj.img) ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
             if(obj.x < -100) gameObjects.splice(i,1);
+     // Inside loop() when checking portal collision
+if(obj.type==='portal'){
+    flashScreen();
+
+    if(currentZone==='CYBER'){
+        currentZone='SNACK';
+        gameSpeed=7;
+    }
+    else if(currentZone==='SNACK'){
+        currentZone='EARTHQUAKE';
+        gameSpeed=12;
+
+        // Play beast mode now, and allow it every time we enter
+        beastModeSfx.currentTime = 0;
+        beastModeSfx.play();
+        beastModePlayed = true;
+    }
+    else{ // returning from Earthquake to Cyber
+        currentZone='CYBER';
+        gameSpeed=7;
+        beastModePlayed=false;
+    }
+
+    bonusCount=0;
+    portalActive=false;
+    gameObjects=[]; // clear objects for transition
+    particles=[];   // clear particles for new zone
+}
         });
 
         document.getElementById('score').innerText=`DIMENSION: ${score}`;
