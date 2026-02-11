@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Maximum Reality: Infinity</title>
+    <title>Maximum Reality: Matrix Infinity</title>
     <style>
         :root { --glitch-color: rgba(0, 255, 255, 0.05); }
         body, html { 
@@ -17,7 +17,6 @@
             color: #0ff; font-family: 'Courier New', monospace;
             z-index: 100; pointer-events: none; text-shadow: 0 0 8px #0ff;
         }
-        /* Blue Screen of Death Effect */
         #bsod {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #0000aa; color: #fff; font-family: 'Courier New';
@@ -28,13 +27,13 @@
 <body>
     <div id="bsod">
         <h1>:(</h1>
-        <p>A problem has been detected and the simulation has been shut down to prevent damage to Azul's quantum core.</p>
-        <p>ERROR: OLD_TECH_COLLISION_0x000001</p>
+        <p>A problem has been detected and the simulation has been shut down.</p>
+        <p>ERROR: KERNEL_DATA_INPAGE_ERROR (old-pc.png)</p>
         <p>REBOOTING REALITY...</p>
     </div>
     <div class="ui-layer">
         <div id="score">DIMENSION: 0</div>
-        <div id="status">UNPLUGGED...</div>
+        <div id="status">INJECTING CODE...</div>
     </div>
     <canvas id="gameCanvas"></canvas>
 
@@ -42,7 +41,6 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- AUDIO INFINITY FIX ---
 const bgMusic = new Audio('password-infinity.mp3');
 bgMusic.loop = true;
 bgMusic.addEventListener('ended', () => { bgMusic.currentTime = 0; bgMusic.play(); });
@@ -60,10 +58,37 @@ const ASSETS = {
 };
 
 const TECH_GEAR = ["💻", "⌨️", "💿", "💾", "💽"];
+const MATRIX_CHARS = "0123456789ABCDEF01";
 
 let gameState = 'START', score = 0, frame = 0, gameSpeed = 7;
 let jumpHeight = 0, yVelocity = 0, shake = 0, dimensionHue = 0;
 const gravity = 1.2, imgCache = {};
+
+// --- MATRIX RAIN LOGIC ---
+let columns;
+let drops = [];
+function initMatrix() {
+    columns = Math.floor(canvas.width / 20);
+    drops = Array(columns).fill(1);
+}
+
+function drawMatrix() {
+    ctx.save();
+    // Using a subtle hue based on dimensionHue
+    ctx.fillStyle = `hsla(${dimensionHue + 120}, 100%, 50%, 0.15)`;
+    ctx.font = "15px monospace";
+    
+    for (let i = 0; i < drops.length; i++) {
+        const text = MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)];
+        ctx.fillText(text, i * 20, drops[i] * 20);
+        
+        if (drops[i] * 20 > canvas.height && Math.random() > 0.975) {
+            drops[i] = 0;
+        }
+        drops[i]++;
+    }
+    ctx.restore();
+}
 
 function load() {
     Object.keys(ASSETS).forEach(key => {
@@ -80,6 +105,7 @@ function resize() {
     canvas.width = window.innerWidth; 
     canvas.height = window.innerHeight;
     floorY = canvas.height - GROUND_Y_OFFSET;
+    initMatrix();
 }
 window.addEventListener('resize', resize); resize();
 
@@ -89,13 +115,10 @@ function spawn() {
     if (Math.random() > 0.993) {
         backgroundProps.push({ x: canvas.width + 200, y: floorY - 350, w: 220, h: 350, passed: false });
     }
-    
     if (frame % 85 === 0) {
         const isTech = Math.random() > 0.5;
         gameObjects.push({
-            x: canvas.width + 100, 
-            y: floorY - 80, 
-            w: 90, h: 80, // Sized for the old-pc.png
+            x: canvas.width + 100, y: floorY - 80, w: 90, h: 80,
             type: isTech ? 'tech' : 'obstacle',
             emoji: isTech ? TECH_GEAR[Math.floor(Math.random() * TECH_GEAR.length)] : null,
             img: isTech ? null : imgCache.obstacles[0]
@@ -107,15 +130,17 @@ function triggerBSOD() {
     gameState = 'GAMEOVER';
     bgMusic.pause();
     document.getElementById('bsod').style.display = 'block';
-    setTimeout(() => {
-        document.getElementById('bsod').style.display = 'none';
-    }, 2000);
+    setTimeout(() => { document.getElementById('bsod').style.display = 'none'; }, 2000);
 }
 
 function draw() {
+    // 1. Static BG
     if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
     
-    // Buildings
+    // 2. MATRIX RAIN LAYER (The Sky)
+    drawMatrix();
+    
+    // 3. Buildings
     const layers = [{img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 550}, {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 450}, {img: imgCache.buildings[0], s: 3, op: 0.6, h: 350}];
     layers.forEach(l => {
         if (l.img.complete) {
@@ -129,7 +154,7 @@ function draw() {
         }
     });
 
-    // Lori-Blur
+    // 4. Lori-Blur
     backgroundProps.forEach((p, i) => {
         p.x -= 4; 
         if (imgCache.loriBlur.complete) {
@@ -138,12 +163,12 @@ function draw() {
             ctx.restore();
         }
         if (!p.passed && p.x < 150) {
-            p.passed = true; shake = 20; dimensionHue += 72;
+            p.passed = true; shake = 25; dimensionHue += 90;
         }
         if (p.x < -350) backgroundProps.splice(i, 1);
     });
 
-    // Ground
+    // 5. Ground
     if (imgCache.floor.complete) {
         let fX = -(frame * gameSpeed) % 100;
         for (let i = -1; i < (canvas.width / 100) + 2; i++) {
@@ -174,14 +199,12 @@ function loop() {
                 if (obj.type === 'tech') { score += 100; gameObjects.splice(i, 1); }
                 else { triggerBSOD(); }
             }
-            
             if (obj.type === 'tech') {
                 ctx.font = "40px Arial";
                 ctx.fillText(obj.emoji, obj.x, obj.y + 40);
             } else if (obj.img && obj.img.complete) {
-                // Flicker effect for PC screen
                 ctx.save();
-                if (Math.random() > 0.9) ctx.filter = "brightness(2) contrast(2)";
+                if (Math.random() > 0.9) ctx.filter = "brightness(2)";
                 ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
                 ctx.restore();
             }
@@ -189,9 +212,9 @@ function loop() {
         });
         document.getElementById('score').innerText = `DIMENSION: ${score}`;
     } else {
-        ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width, canvas.height);
+        ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,canvas.width, canvas.height);
         ctx.fillStyle = "#0ff"; ctx.textAlign = "center"; ctx.font = "18px Courier";
-        ctx.fillText(gameState === 'START' ? "TAP TO INJECT INFINITY" : "REBOOTING SIMULATION...", canvas.width/2, canvas.height/2);
+        ctx.fillText(gameState === 'START' ? "TAP TO INJECT CODE" : "REBOOTING...", canvas.width/2, canvas.height/2);
     }
     ctx.restore();
     requestAnimationFrame(loop);
@@ -200,8 +223,7 @@ function loop() {
 window.addEventListener('touchstart', (e) => {
     if (gameState !== 'PLAYING') {
         gameState = 'PLAYING'; score = 0; frame = 0; gameObjects = []; backgroundProps = [];
-        dimensionHue = 0;
-        bgMusic.play().catch(e => console.log("Audio unlock required"));
+        dimensionHue = 0; bgMusic.play();
     } else if (jumpHeight === 0) yVelocity = -22;
     e.preventDefault();
 }, {passive: false});
