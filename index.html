@@ -71,6 +71,35 @@
         .scenery-prop {
             position: absolute; bottom: 12vh; height: 50px; z-index: 15;
         }
+        /* The Snack Items */
+.snack {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    z-index: 15;
+    transition: transform 0.1s linear;
+}
+
+/* Jump Animation for Azul */
+.jump {
+    animation: azul-run 0.4s steps(1) infinite, azul-jump-arc 0.6s ease-out !important;
+}
+
+@keyframes azul-jump-arc {
+    0% { bottom: 12vh; }
+    50% { bottom: 30vh; } /* Peak of the jump */
+    100% { bottom: 12vh; }
+}
+
+#lori-commander {
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+#lori-commander:active {
+    transform: scale(1.05); /* Visual feedback when tapping Lori */
+}
+
     </style>
 </head>
 <body>
@@ -85,56 +114,106 @@
 
 <script>
     const stage = document.getElementById('game-stage');
+const azul = document.getElementById('azul-hacker');
+const lori = document.getElementById('lori-commander');
 
-    function createBuilding(type) {
-        const b = document.createElement('div');
-        b.className = `building layer-${type}`;
-        b.style.backgroundImage = `url('building-${type}.png')`;
-        b.style.right = '-400px';
-        stage.appendChild(b);
+const snacks = ['mochkil-burger.png', 'pink-donut.png', 'taco.png', 'hotdog.png', 'roast-chicken.png', 'chips.png'];
 
-        let pos = -400;
-        // Parallax speeds: A is fastest, C is slowest
-        const speeds = { 'a': 6, 'b': 4, 'c': 2 };
-        const speed = speeds[type];
-
-        const move = setInterval(() => {
-            pos += speed;
-            b.style.right = pos + 'px';
-            if (pos > window.innerWidth + 400) {
-                clearInterval(move);
-                b.remove();
-            }
-        }, 16);
+// 1. Function to make Azul jump
+function azulJump() {
+    if (!azul.classList.contains('jump')) {
+        azul.classList.add('jump');
+        setTimeout(() => {
+            azul.classList.remove('jump');
+        }, 600);
     }
+}
 
-    function spawnProp() {
-        const props = ['dumpster.png', 'litter-box.png', 'cardboard_tank.png', 'mochkil-burger.png'];
-        const p = document.createElement('img');
-        p.src = props[Math.floor(Math.random() * props.length)];
-        p.className = 'scenery-prop';
-        p.style.right = '-100px';
-        stage.appendChild(p);
+// 2. Function for Lori to toss a snack
+function tossSnack() {
+    const snackImg = document.createElement('img');
+    const randomSnack = snacks[Math.floor(Math.random() * snacks.length)];
+    
+    snackImg.src = randomSnack;
+    snackImg.className = 'snack';
+    
+    // Start at Lori's position
+    let snackX = 15; // vw
+    let snackY = 40; // vh
+    snackImg.style.left = snackX + 'vw';
+    snackImg.style.bottom = snackY + 'vh';
+    
+    stage.appendChild(snackImg);
 
-        let pos = -100;
-        const move = setInterval(() => {
-            pos += 8; // Props move fastest for ground-level speed feel
-            p.style.right = pos + 'px';
-            if (pos > window.innerWidth + 200) { clearInterval(move); p.remove(); }
-        }, 16);
-    }
+    // Physics for the toss
+    let speedX = 1.2;
+    let speedY = 0.5;
+    let gravity = 0.05;
 
-    // Spawn buildings at different rates to maintain layers
-    setInterval(() => createBuilding('c'), 4000);
-    setInterval(() => createBuilding('b'), 3000);
-    setInterval(() => createBuilding('a'), 2000);
-    setInterval(spawnProp, 1500);
+    const moveSnack = setInterval(() => {
+        snackX += speedX;
+        speedY -= gravity;
+        snackY += speedY;
 
-    // Randomly change the city tint to show "The Hack"
-    setInterval(() => {
-        const colors = ['rgba(255,0,255,0.2)', 'rgba(0,255,255,0.2)', 'rgba(255,255,0,0.1)'];
-        document.documentElement.style.setProperty('--city-tint', colors[Math.floor(Math.random()*colors.length)]);
-    }, 5000);
+        snackImg.style.left = snackX + 'vw';
+        snackImg.style.bottom = snackY + 'vh';
+
+        // Check for "Catch" (Collision with Azul)
+        const azulRect = azul.getBoundingClientRect();
+        const snackRect = snackImg.getBoundingClientRect();
+
+        if (snackRect.left < azulRect.right &&
+            snackRect.right > azulRect.left &&
+            snackRect.top < azulRect.bottom &&
+            snackRect.bottom > azulRect.top) {
+            
+            // Azul caught it!
+            azulJump();
+            snackImg.remove();
+            clearInterval(moveSnack);
+            console.log("Mochkil Snack Attack Success!");
+        }
+
+        // Remove if it falls off screen
+        if (snackY < 0 || snackX > 100) {
+            clearInterval(moveSnack);
+            snackImg.remove();
+        }
+    }, 20);
+}
+
+// Tap Lori to toss snacks
+lori.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    tossSnack();
+});
+
+// Generic scenery and building spawners from previous step
+function createBuilding(type) {
+    const b = document.createElement('div');
+    b.className = `building layer-${type}`;
+    b.style.backgroundImage = `url('building-${type}.png')`;
+    b.style.right = '-400px';
+    stage.appendChild(b);
+    let pos = -400;
+    const speeds = { 'a': 6, 'b': 4, 'c': 2 };
+    const move = setInterval(() => {
+        pos += speeds[type];
+        b.style.right = pos + 'px';
+        if (pos > window.innerWidth + 400) { clearInterval(move); b.remove(); }
+    }, 16);
+}
+
+setInterval(() => createBuilding('c'), 4000);
+setInterval(() => createBuilding('b'), 3000);
+setInterval(() => createBuilding('a'), 2000);
+
+// Background Tint Logic
+setInterval(() => {
+    const colors = ['rgba(255,0,255,0.2)', 'rgba(0,255,255,0.2)', 'rgba(255,255,0,0.1)'];
+    document.documentElement.style.setProperty('--city-tint', colors[Math.floor(Math.random()*colors.length)]);
+}, 5000);
+
 </script>
 
 </body>
