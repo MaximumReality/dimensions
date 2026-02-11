@@ -5,19 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Maximum Reality: Binary Infinity</title>
 <style>
-body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; -webkit-user-select:none; touch-action:none;}
+body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; -webkit-user-select:none; touch-action:none; }
 #gameCanvas { display:block; width:100vw; height:100vh; background:#000; }
-
 .ui-layer { position:absolute; top:env(safe-area-inset-top); left:20px; color:#0ff; font-family:'Courier New', monospace; z-index:100; pointer-events:none; text-shadow:0 0 8px #0ff; }
 #score { font-size:24px; font-weight:bold; }
 #highScore { font-size:14px; opacity:0.8; margin-top:5px; }
-
 .controls { position:absolute; top:env(safe-area-inset-top); right:20px; display:flex; gap:15px; z-index:150; }
-.btn { font-size:24px; background:rgba(0,255,255,0.15); border:1.5px solid #0ff; border-radius:8px; padding:8px; color:#0ff; cursor:pointer; backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center;}
+.btn { font-size:24px; background:rgba(0,255,255,0.15); border:1.5px solid #0ff; border-radius:8px; padding:8px; color:#0ff; cursor:pointer; backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; }
 .home-btn { text-decoration:none; }
-
 #bsod { position:fixed; top:0; left:0; width:100%; height:100%; background:#0000aa; color:#fff; font-family:'Courier New'; display:none; z-index:200; padding:50px; box-sizing:border-box; }
-#flash { position:fixed; top:0; left:0; width:100%; height:100%; background:#fff; display:none; z-index:300; }
 </style>
 </head>
 <body>
@@ -26,7 +22,6 @@ body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
 <p>CRITICAL_DIMENSION_ERROR</p>
 <p>REBOOTING SIMULATION...</p>
 </div>
-<div id="flash"></div>
 
 <div class="controls">
 <a href="https://MaximumReality.xyz" class="btn home-btn">🏠</a>
@@ -44,170 +39,198 @@ body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const bgMusic = new Audio('password-infinity.mp3'); bgMusic.loop=true;
+const bgMusic = new Audio('password-infinity.mp3'); bgMusic.loop = true;
 
 // --- STATE ---
-let isMuted=false, isPaused=false;
-let gameState='START', score=0, frame=0, gameSpeed=7;
-let jumpHeight=0, yVelocity=0, shake=0, dimensionHue=0;
-const gravity=1.2, GROUND_Y_OFFSET=100; let floorY;
-let highScore = localStorage.getItem('maxRealityHighScore')||0;
-let collectedCount=0;
-let portalActive=false;
-let nextPortalScore=5000;
+let isMuted=false, isPaused=false, gameState='START', score=0, frame=0, gameSpeed=7;
+let jumpHeight=0, yVelocity=0, shake=0, dimensionHue=0, floorY;
+const gravity=1.2, GROUND_Y_OFFSET=100;
+let highScore=localStorage.getItem('maxRealityHighScore')||0;
 
 // --- ASSETS ---
-const ASSETS={
-  bg:'gg-bg.png',
-  floor:'floor.png',
-  azul:['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
-  buildings:['building-a.png','building-b.png','building-c.png'],
-  loriBlur:'lori-blur.png',
-  obstacles:['old-pc.png']
+const ASSETS = {
+    bg:'gg-bg.png',
+    floor:'floor.png',
+    azul:['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
+    buildings:['building-a.png','building-b.png','building-c.png'],
+    loriBlur:'lori-blur.png',
+    obstacles:['old-pc.png']
 };
-const LOOT_ASSETS=['power-supply.png','2tb.png','card.png','core-i7.png','curve-keyboard.png','core-i9.png','cpu-water-cooler.png','optical-drive.png','ram.png','motherboard.png','ssd.png','graphics-card.png','circuitpython.png'];
-const FOOD_ASSETS=['bread-slice.png','chips.png','hotdog.png','pink-donut.png','roast-chicken.png','soda.png','taco.png','mochkil-burger.png','mochkil_puffs_orange.png','azulo_blueberry_vanilla.jpg'];
 
-const imgCache={loot:[], lootFood:[]};
+const NORMAL_LOOT = ['power-supply.png','2tb.png','card.png','core-i7.png','curve-keyboard.png','core-i9.png','cpu-water-cooler.png','optical-drive.png','ram.png','motherboard.png','ssd.png','graphics-card.png','circuitpython.png'];
+const SNACK_LOOT = ['bread-slice.png','chips.png','hotdog.png','pink-donut.png','roast-chicken.png','soda.png','taco.png','mochkil-burger.png','mochkil_puffs_orange.png','azulo_blueberry_vanilla.jpg'];
 
-// PARTICLE ENGINE
+const imgCache={loot:[]};
+
+// --- PARTICLES ---
 let particles=[];
-class Particle{
-  constructor(x,y,color,text=null){
-    this.x=x; this.y=y;
-    this.char=text||Math.random()>0.5?"1":"0";
-    this.size=text?28:Math.random()*10+12;
-    this.speedX=(Math.random()-0.5)*10;
-    this.speedY=(Math.random()-0.5)*10;
-    this.color=color; this.life=1.0;
-  }
-  update(){ this.x+=this.speedX; this.y+=this.speedY; this.life-=0.02; }
-  draw(){ ctx.save(); ctx.fillStyle=this.color; ctx.globalAlpha=this.life; ctx.font=`bold ${this.size}px monospace`; ctx.fillText(this.char,this.x,this.y); ctx.restore(); }
+class Particle {
+    constructor(x,y,color,text=null){
+        this.x=x; this.y=y; this.char=text||((Math.random()>0.5)?"1":"0");
+        this.size=text?28:Math.random()*10+12;
+        this.speedX=(Math.random()-0.5)*10;
+        this.speedY=(Math.random()-0.5)*10;
+        this.color=color; this.life=1;
+    }
+    update(){ this.x+=this.speedX; this.y+=this.speedY; this.life-=0.02; }
+    draw(){ ctx.save(); ctx.fillStyle=this.color; ctx.globalAlpha=this.life; ctx.font=`bold ${this.size}px monospace`; ctx.fillText(this.char,this.x,this.y); ctx.restore(); }
 }
 
-function load(){
-  Object.keys(ASSETS).forEach(key=>{
-    if(Array.isArray(ASSETS[key])) imgCache[key]=ASSETS[key].map(src=>{let i=new Image(); i.src=src; return i;});
-    else{ imgCache[key]=new Image(); imgCache[key].src=ASSETS[key]; }
-  });
-  LOOT_ASSETS.forEach(src=>{ let i=new Image(); i.src=src; imgCache.loot.push(i); });
-  FOOD_ASSETS.forEach(src=>{ let i=new Image(); i.src=src; imgCache.lootFood.push(i); });
-}
-
+// --- MATRIX RAIN ---
 let drops=[];
 function initMatrix(){ drops=Array(Math.floor(canvas.width/20)).fill(1); }
 
-function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; floorY=canvas.height-GROUND_Y_OFFSET; initMatrix(); }
+// --- GAME OBJECTS ---
+let gameObjects=[], backgroundProps=[], portalActive=false, portalNextScore=5000, inAir=false, bonusCount=0;
+
+// --- LOAD ASSETS ---
+function load(){
+    Object.keys(ASSETS).forEach(k=>{
+        if(Array.isArray(ASSETS[k])) imgCache[k]=ASSETS[k].map(s=>{let i=new Image();i.src=s;return i;});
+        else{imgCache[k]=new Image();imgCache[k].src=ASSETS[k];}
+    });
+    NORMAL_LOOT.forEach(s=>{let i=new Image();i.src=s; imgCache.loot.push(i);});
+}
+load();
+
+// --- RESIZE ---
+function resize(){
+    canvas.width=window.innerWidth; canvas.height=window.innerHeight;
+    floorY=canvas.height-GROUND_Y_OFFSET;
+    initMatrix();
+}
 window.addEventListener('resize',resize);
+resize();
 
-// --- UI HANDLERS ---
-document.getElementById('muteBtn').addEventListener('touchstart',e=>{e.stopPropagation(); isMuted=!isMuted; bgMusic.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊';},{passive:false});
-document.getElementById('pauseBtn').addEventListener('touchstart',e=>{e.stopPropagation(); isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff';},{passive:false});
+// --- CONTROLS ---
+document.getElementById('muteBtn').addEventListener('touchstart',e=>{ e.stopPropagation(); isMuted=!isMuted; bgMusic.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊'; },{passive:false});
+document.getElementById('pauseBtn').addEventListener('touchstart',e=>{ e.stopPropagation(); isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff'; },{passive:false});
 
-// --- GAME ---
-let gameObjects=[];
+// --- BSOD ---
+function triggerBSOD(){
+    gameState='GAMEOVER'; bgMusic.pause();
+    if(score>highScore){highScore=score; localStorage.setItem('maxRealityHighScore',highScore);}
+    document.getElementById('bsod').style.display='block';
+    setTimeout(()=>{document.getElementById('bsod').style.display='none'; gameState='START';},2000);
+}
 
-function triggerBSOD(){ gameState='GAMEOVER'; bgMusic.pause(); if(score>highScore){ highScore=score; localStorage.setItem('maxRealityHighScore',highScore); } document.getElementById('bsod').style.display='block'; setTimeout(()=>{document.getElementById('bsod').style.display='none'; gameState='START';},2000); }
-
+// --- SPAWN ---
 function spawn(){
-  if(frame%85===0){
-    const isPortal=portalActive;
-    let obj;
-    if(isPortal){
-      obj={ x:canvas.width+100, y:floorY-90, w:80, h:80, type:'tech', img:imgCache.lootFood[Math.floor(Math.random()*imgCache.lootFood.length)] };
-    }else{
-      const isLoot=Math.random()>0.4;
-      obj={ x:canvas.width+100, y:floorY-90, w:80, h:80, type:isLoot?'tech':'obstacle', img:isLoot?imgCache.loot[Math.floor(Math.random()*imgCache.loot.length)]:imgCache.obstacles[0] };
+    if(portalActive){ // SNACK STORE
+        if(frame%50===0){
+            const lootImg=imgCache.loot[Math.floor(Math.random()*SNACK_LOOT.length)];
+            gameObjects.push({x:canvas.width+50, y:floorY-80, w:70, h:70, type:'tech', img:lootImg, multiplier:bonusCount+1});
+        }
+    } else { // NORMAL WORLD
+        if(frame%85===0){
+            const isLoot=Math.random()>0.4;
+            const lootImg=isLoot?imgCache.loot[Math.floor(Math.random()*NORMAL_LOOT.length)]:imgCache.obstacles[0];
+            gameObjects.push({x:canvas.width+100,y:floorY-90,w:80,h:80,type:isLoot?'tech':'obstacle',img:lootImg,multiplier:bonusCount+1});
+        }
     }
-    gameObjects.push(obj);
-  }
 }
 
+// --- DRAW ---
 function drawBackground(){
-  // BG
-  if(portalActive && imgCache.hotFood) ctx.drawImage(imgCache.hotFood,0,0,canvas.width,canvas.height);
-  else if(imgCache.bg.complete) ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
+    // 1. Static bg
+    if(imgCache.bg.complete) ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
 
-  // LORI BLUR
-  if(imgCache.loriBlur.complete && !portalActive){ ctx.save(); ctx.globalAlpha=0.4; let lX=-(frame*0.5)%canvas.width; ctx.drawImage(imgCache.loriBlur,lX,0,canvas.width,canvas.height); ctx.drawImage(imgCache.loriBlur,lX+canvas.width,0,canvas.width,canvas.height); ctx.restore(); }
+    // 2. Lori blur (parallax visual)
+    if(imgCache.loriBlur.complete){
+        ctx.save(); ctx.globalAlpha=0.4;
+        let lX=-(frame*0.5)%canvas.width;
+        ctx.drawImage(imgCache.loriBlur,lX,0,canvas.width,canvas.height);
+        ctx.drawImage(imgCache.loriBlur,lX+canvas.width,0,canvas.width,canvas.height);
+        ctx.restore();
+    }
 
-  // BUILDINGS
-  const layers=[{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
-  layers.forEach(l=>{ if(l.img.complete){ ctx.save(); let x=-(frame*l.s)%canvas.width; ctx.globalAlpha=l.op; ctx.filter=`hue-rotate(${dimensionHue}deg)`; ctx.drawImage(l.img,x,floorY-l.h,canvas.width,l.h); ctx.drawImage(l.img,x+canvas.width,floorY-l.h,canvas.width,l.h); ctx.restore(); } });
-
-  // MATRIX RAIN
-  ctx.save(); ctx.fillStyle=`hsla(${dimensionHue},100%,50%,0.8)`; ctx.font="bold 18px monospace";
-  drops.forEach((y,i)=>{ ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20); if(y*20>canvas.height && Math.random()>0.975) drops[i]=0; drops[i]++; });
-  ctx.restore();
-
-  // FLOOR
-  ctx.fillStyle="#111"; ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET);
-}
-
-function loop(){
-  if(isPaused){ requestAnimationFrame(loop); return; }
-  ctx.save();
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  drawBackground();
-
-  // PARTICLES
-  particles.forEach((p,i)=>{ p.update(); p.draw(); if(p.life<=0) particles.splice(i,1); });
-
-  if(gameState==='PLAYING'){
-    frame++; spawn();
-    jumpHeight-=yVelocity; yVelocity+=gravity;
-    if(jumpHeight<=0 && yVelocity>0){ jumpHeight=0; yVelocity=0; shake=12; } // brief glitch only on landing
-    if(jumpHeight>0) shake=0;
-
-    const aFrame=Math.floor(frame/6)%4;
-    ctx.drawImage(imgCache.azul[aFrame],100,floorY-110-jumpHeight,90,115);
-
-    gameObjects.forEach((obj,i)=>{
-      obj.x-=gameSpeed;
-      if(obj.x<160 && obj.x>80 && jumpHeight<70){
-        if(obj.type==='tech'){
-          collectedCount++; 
-          let bonus=Math.min(collectedCount,10); 
-          score+=100*bonus; dimensionHue+=10; 
-          for(let j=0;j<10;j++) particles.push(new Particle(obj.x,obj.y,`hsl(${dimensionHue},100%,50%)`)); 
-          particles.push(new Particle(obj.x,obj.y,'#fff',`+${100*bonus}`)); 
-          if(collectedCount>=10) collectedCount=0;
-          gameObjects.splice(i,1);
-        }else{ triggerBSOD(); }
-      }
-      if(obj.img) ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
-      if(obj.x<-100) gameObjects.splice(i,1);
+    // 3. Buildings
+    const layers=[{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
+    layers.forEach(l=>{
+        if(l.img.complete){ctx.save();let x=-(frame*l.s)%canvas.width;ctx.globalAlpha=l.op;ctx.filter=`hue-rotate(${dimensionHue}deg)`;ctx.drawImage(l.img,x,floorY-l.h,canvas.width,l.h);ctx.drawImage(l.img,x+canvas.width,floorY-l.h,canvas.width,l.h);ctx.restore();}
     });
 
-    // PORTAL CHECK
-    if(score>=nextPortalScore && !portalActive){
-      portalActive=true;
-      document.getElementById('flash').style.display='block';
-      setTimeout(()=>{document.getElementById('flash').style.display='none';},120);
-    }
+    // 4. Matrix Rain
+    ctx.save(); ctx.fillStyle=`hsla(${dimensionHue},100%,50%,0.8)`; ctx.font="bold 18px monospace";
+    drops.forEach((y,i)=>{ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20); if(y*20>canvas.height&&Math.random()>0.975)drops[i]=0; drops[i]++;});
+    ctx.restore();
 
-    // EXIT PORTAL
-    if(portalActive && score>=nextPortalScore+200){ portalActive=false; nextPortalScore+=5000; collectedCount=0; }
-
-    document.getElementById('score').innerText=`DIMENSION: ${score}`;
-    document.getElementById('highScore').innerText=`BEST: ${highScore}`;
-  }else{
-    ctx.fillStyle="rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle="#0ff"; ctx.textAlign="center"; ctx.font="24px Courier"; ctx.fillText("TAP TO INJECT CODE",canvas.width/2,canvas.height/2);
-  }
-  ctx.restore();
-  requestAnimationFrame(loop);
+    // 5. Ground (solid color)
+    ctx.fillStyle="#111"; ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET);
 }
 
-window.addEventListener('touchstart',(e)=>{
-  if(e.target.closest('.btn')) return;
-  if(gameState!=='PLAYING'){ gameState='PLAYING'; score=0; frame=0; gameObjects=[]; bgMusic.play().catch(()=>{}); }
-  else if(jumpHeight===0) yVelocity=-22;
-  e.preventDefault();
+// --- LOOP ---
+function loop(){
+    if(isPaused){requestAnimationFrame(loop); return;}
+    ctx.save();
+    if(shake>0){ctx.translate(Math.random()*shake,Math.random()*shake); shake*=0.7;} // brief glitch
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    drawBackground();
+
+    // particles
+    particles.forEach((p,i)=>{p.update();p.draw();if(p.life<=0)particles.splice(i,1);});
+
+    if(gameState==='PLAYING'){
+        frame++; spawn();
+
+        const wasInAir=inAir;
+        inAir=(jumpHeight>0);
+
+        // --- JUMP PHYSICS ---
+        jumpHeight-=yVelocity; yVelocity+=gravity;
+        if(jumpHeight<=0){jumpHeight=0; yVelocity=0; if(wasInAir) shake=15;} // LANDING triggers glitch
+
+        // --- PLAYER ---
+        const aFrame=Math.floor(frame/6)%4;
+        ctx.drawImage(imgCache.azul[aFrame],100,floorY-110-jumpHeight,90,115);
+
+        // --- GAME OBJECTS ---
+        gameObjects.forEach((obj,i)=>{
+            obj.x-=gameSpeed;
+            if(obj.x<160&&obj.x>80&&jumpHeight<70){
+                if(obj.type==='tech'){
+                    const multiplier=bonusCount<10?bonusCount+1:1;
+                    const points=100*multiplier;
+                    score+=points; bonusCount=(bonusCount<10)?bonusCount+1:1; dimensionHue+=5;
+                    particles.push(new Particle(obj.x,obj.y,"#0ff",`+${points}`));
+                    shake=5; // tiny impact
+                    gameObjects.splice(i,1);
+                } else { triggerBSOD(); }
+            }
+            if(obj.img) ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
+            if(obj.x<-100) gameObjects.splice(i,1);
+        });
+
+        // --- PORTAL LOGIC ---
+        if(!portalActive && score>=portalNextScore){
+            portalActive=true; dimensionHue+=180;
+            // flash white
+            ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
+            setTimeout(()=>{portalActive=false; portalNextScore+=5000; bonusCount=0;},100);
+        }
+
+        // --- UI ---
+        document.getElementById('score').innerText=`DIMENSION: ${score}`;
+        document.getElementById('highScore').innerText=`BEST: ${highScore}`;
+
+    } else {
+        ctx.fillStyle="rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle="#0ff"; ctx.textAlign="center"; ctx.font="24px Courier";
+        ctx.fillText("TAP TO INJECT CODE",canvas.width/2,canvas.height/2);
+    }
+    ctx.restore();
+    requestAnimationFrame(loop);
+}
+
+// --- TOUCH ---
+window.addEventListener('touchstart',e=>{
+    if(e.target.closest('.btn')) return;
+    if(gameState!=='PLAYING'){gameState='PLAYING'; score=0; frame=0; gameObjects=[]; bgMusic.play().catch(()=>{});}
+    else if(jumpHeight===0)yVelocity=-22;
+    e.preventDefault();
 },{passive:false});
 
-load(); resize(); window.addEventListener('resize',resize);
 loop();
 </script>
 </body>
