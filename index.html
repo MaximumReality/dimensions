@@ -3,71 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Maximum Reality: Fixed Dimensions</title>
+    <title>Maximum Reality: Cyber Alley Fixed</title>
     <style>
-        :root {
-            --city-tint: rgba(255, 0, 255, 0.15);
-            --neon-blue: #00ffff;
-        }
-
+        /* 1. THE FOUNDATION */
         body, html {
             margin: 0; padding: 0;
             width: 100%; height: 100%;
-            overflow: hidden; background: #000;
+            overflow: hidden; background: #111;
         }
 
-        #game-stage {
-            width: 100vw; height: 100vh;
+        /* 2. THE BACKGROUND STACK */
+        #game-viewport {
             position: relative;
-            background: linear-gradient(var(--city-tint), var(--city-tint)), url('gg-bg.png');
+            width: 100vw; height: 100vh;
+            background: url('gg-bg.png') center bottom no-repeat;
             background-size: cover;
-            background-blend-mode: overlay;
+            z-index: 0; /* Base Layer */
         }
 
-        /* --- LAYER MANAGEMENT --- */
-        
-        /* Level 1: Back Buildings (Layer C) */
-        .layer-c { z-index: 1; height: 70vh; opacity: 0.4; filter: blur(1px); }
-        
-        /* Level 2: Mid Buildings (Layer B) */
-        .layer-b { z-index: 2; height: 55vh; opacity: 0.7; }
-        
-        /* Level 3: Front Buildings (Layer A) */
-        .layer-a { z-index: 3; height: 40vh; opacity: 1; }
+        /* 3. PARALLAX CITY LAYERS */
+        .city-layer {
+            position: absolute;
+            bottom: 0; left: 0;
+            width: 200%; height: 100%;
+            pointer-events: none; /* Buildings don't block clicks */
+        }
 
+        /* Layer C: Deep Background (Slowest) */
+        #layer-c-container { z-index: 1; opacity: 0.3; }
+        /* Layer B: Mid-ground */
+        #layer-b-container { z-index: 2; opacity: 0.6; }
+        /* Layer A: Close-ground (Fastest) */
+        #layer-a-container { z-index: 3; }
+
+        /* Building styling */
         .building {
             position: absolute;
-            bottom: 15vh; /* Aligned to floor top */
-            background-repeat: no-repeat;
+            bottom: 15vh;
             background-size: contain;
+            background-repeat: no-repeat;
             background-position: bottom;
         }
-
-        /* Level 4: The Floor */
+        
+        /* 4. THE PLAYABLE ZONE */
         #floor {
             position: absolute; bottom: 0;
-            width: 100%; height: 16vh;
+            width: 100%; height: 18vh;
             background: url('floor.png') repeat-x;
-            background-size: contain; 
-            z-index: 10; /* Keeps scenery behind feet but above buildings */
+            background-size: contain;
+            z-index: 10; /* Above all buildings */
         }
 
-        /* Level 5: The Characters (Highest Priority) */
-        #lori-commander {
-            position: absolute; bottom: 10vh; left: 5vw;
-            height: 48vh; z-index: 50; /* High Z-index to stay on top */
-            pointer-events: auto; /* Ensures tap works */
+        #lori-hero {
+            position: absolute; bottom: 10vh; left: 10vw;
+            height: 45vh; z-index: 20; /* Front and center */
         }
 
-        #azul-hacker {
-            position: absolute; bottom: 12vh; left: 28vw;
+        #azul-runner {
+            position: absolute; bottom: 12vh; left: 30vw;
             width: 100px; height: 100px;
-            background-size: contain; background-repeat: no-repeat;
-            z-index: 51;
-            animation: azul-run 0.4s steps(1) infinite;
+            z-index: 21;
+            background-size: contain;
+            animation: azul-run 0.5s steps(1) infinite;
         }
-
-        .snack { z-index: 55; position: absolute; width: 50px; }
 
         @keyframes azul-run {
             0% { background-image: url('Azul-run.png'); }
@@ -79,29 +77,38 @@
 </head>
 <body>
 
-<div id="game-stage">
+<div id="game-viewport">
+    <div id="layer-c-container" class="city-layer"></div>
+    <div id="layer-b-container" class="city-layer"></div>
+    <div id="layer-a-container" class="city-layer"></div>
+
     <img src="Banner.PNG" style="position:absolute; top:0; width:100%; z-index:100;">
-    
     <div id="floor"></div>
-    
-    <img src="lori-suit.png" id="lori-commander" alt="Lori">
-    <div id="azul-hacker"></div>
+    <img src="lori-suit.png" id="lori-hero">
+    <div id="azul-runner"></div>
 </div>
 
 <script>
-    const stage = document.getElementById('game-stage');
-    // Ensure we append buildings at the start of the stage so they stay "behind" in DOM order too
-    function createBuilding(type) {
-        const b = document.createElement('div');
-        b.className = `building layer-${type}`;
-        b.style.backgroundImage = `url('building-${type}.png')`;
-        b.style.right = '-400px';
-        
-        // prepend puts it behind characters in the DOM
-        stage.prepend(b);
+    const containers = {
+        'a': document.getElementById('layer-a-container'),
+        'b': document.getElementById('layer-b-container'),
+        'c': document.getElementById('layer-c-container')
+    };
 
-        let pos = -400;
-        const speeds = { 'a': 5, 'b': 3, 'c': 1.5 };
+    const heights = { 'a': '35vh', 'b': '55vh', 'c': '75vh' };
+    const speeds = { 'a': 6, 'b': 3, 'c': 1 };
+
+    function spawnBuilding(type) {
+        const b = document.createElement('div');
+        b.className = 'building';
+        b.style.backgroundImage = `url('building-${type}.png')`;
+        b.style.height = heights[type];
+        b.style.width = '250px';
+        b.style.right = '-300px';
+        
+        containers[type].appendChild(b);
+
+        let pos = -300;
         const move = setInterval(() => {
             pos += speeds[type];
             b.style.right = pos + 'px';
@@ -112,12 +119,10 @@
         }, 16);
     }
 
-    // Logic for Lori tossing snacks remains the same
-    // Just make sure snack z-index is high!
-    
-    setInterval(() => createBuilding('c'), 5000);
-    setInterval(() => createBuilding('b'), 3500);
-    setInterval(() => createBuilding('a'), 2000);
+    // Synchronized city spawn
+    setInterval(() => spawnBuilding('c'), 4500);
+    setInterval(() => spawnBuilding('b'), 3000);
+    setInterval(() => spawnBuilding('a'), 2000);
 </script>
 </body>
 </html>
