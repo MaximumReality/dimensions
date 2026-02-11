@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Maximum Reality: Snack Portal</title>
+    <title>Maximum Reality: HackerCat Paradise</title>
     <style>
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
@@ -74,6 +74,7 @@ const LOOT_SNACKS = [
 
 let gameState = 'START', currentZone = 'CYBER'; 
 let score = 0, frame = 0, gameSpeed = 7, snackX = 0;
+let lastPortalMilestone = 0;
 let jumpHeight = 0, yVelocity = 0, shake = 0, dimensionHue = 0;
 const gravity = 1.2, imgCache = { loot: [], snacks: [] };
 let particles = [], gameObjects = [], backgroundProps = [];
@@ -143,13 +144,17 @@ function toggleZone() {
         currentZone = 'CYBER'; gameSpeed = 7;
         document.getElementById('status').innerText = "RE-ENTERING MATRIX...";
     }
-    gameObjects = []; // Clear for smooth transition
+    gameObjects = [];
 }
 
 function spawn() {
     const milestone = Math.floor(score / 1000) * 1000;
-    if (score > 0 && score === milestone && !gameObjects.some(o => o.type === 'portal')) {
-        gameObjects.push({ x: canvas.width + 100, y: floorY - 140, w: 120, h: 140, type: 'portal', img: imgCache.portal });
+    if (score >= 1000 && milestone > lastPortalMilestone) {
+        lastPortalMilestone = milestone;
+        gameObjects.push({ 
+            x: canvas.width + 100, y: floorY - 140, w: 120, h: 140, 
+            type: 'portal', img: imgCache.portal 
+        });
     }
     
     if (frame % 80 === 0) {
@@ -267,8 +272,14 @@ function loop() {
 
 window.addEventListener('touchstart', (e) => {
     if (gameState !== 'PLAYING') {
-        gameState = 'PLAYING'; score = 0; frame = 0; gameObjects = []; backgroundProps = [];
-        currentZone = 'CYBER'; gameSpeed = 7; dimensionHue = 0; bgMusic.play().catch(()=>{});
+        gameState = 'PLAYING'; 
+        score = 0; 
+        frame = 0; 
+        lastPortalMilestone = 0; 
+        currentZone = 'CYBER'; 
+        gameSpeed = 7; 
+        dimensionHue = 0; 
+        bgMusic.play().catch(()=>{});
     } else if (jumpHeight === 0) yVelocity = -22;
     e.preventDefault();
 }, {passive: false});
