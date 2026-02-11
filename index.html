@@ -17,9 +17,21 @@
             color: #0ff; font-family: 'Courier New', monospace;
             z-index: 100; pointer-events: none; text-shadow: 0 0 8px #0ff;
         }
+        /* Blue Screen of Death Effect */
+        #bsod {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0000aa; color: #fff; font-family: 'Courier New';
+            display: none; z-index: 200; padding: 50px; box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
+    <div id="bsod">
+        <h1>:(</h1>
+        <p>A problem has been detected and the simulation has been shut down to prevent damage to Azul's quantum core.</p>
+        <p>ERROR: OLD_TECH_COLLISION_0x000001</p>
+        <p>REBOOTING REALITY...</p>
+    </div>
     <div class="ui-layer">
         <div id="score">DIMENSION: 0</div>
         <div id="status">UNPLUGGED...</div>
@@ -30,13 +42,10 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- AUDIO FIX ---
+// --- AUDIO INFINITY FIX ---
 const bgMusic = new Audio('password-infinity.mp3');
-// Explicitly handle the end of the track for perfect looping on iPhone
-bgMusic.addEventListener('ended', function() {
-    this.currentTime = 0;
-    this.play();
-}, false);
+bgMusic.loop = true;
+bgMusic.addEventListener('ended', () => { bgMusic.currentTime = 0; bgMusic.play(); });
 
 const GROUND_Y_OFFSET = 100; 
 let floorY;
@@ -47,10 +56,9 @@ const ASSETS = {
     azul: ['Azul-doll.png', 'Azul-doll2.png', 'Azul-doll3.png', 'Azul-doll4.png'],
     buildings: ['building-a.png', 'building-b.png', 'building-c.png'],
     loriBlur: 'lori-blur.png',
-    obstacles: ['dumpster.png']
+    obstacles: ['old-pc.png']
 };
 
-// Tech Emojis to replace snacks
 const TECH_GEAR = ["💻", "⌨️", "💿", "💾", "💽"];
 
 let gameState = 'START', score = 0, frame = 0, gameSpeed = 7;
@@ -78,23 +86,30 @@ window.addEventListener('resize', resize); resize();
 let gameObjects = [], backgroundProps = [];
 
 function spawn() {
-    // Lori-Blur Spawn
     if (Math.random() > 0.993) {
         backgroundProps.push({ x: canvas.width + 200, y: floorY - 350, w: 220, h: 350, passed: false });
     }
     
-    // Tech Spawn (Replacing Snacks)
     if (frame % 85 === 0) {
         const isTech = Math.random() > 0.5;
         gameObjects.push({
             x: canvas.width + 100, 
-            y: floorY - 60, 
-            w: 60, h: 60,
+            y: floorY - 80, 
+            w: 90, h: 80, // Sized for the old-pc.png
             type: isTech ? 'tech' : 'obstacle',
-            emoji: TECH_GEAR[Math.floor(Math.random() * TECH_GEAR.length)],
+            emoji: isTech ? TECH_GEAR[Math.floor(Math.random() * TECH_GEAR.length)] : null,
             img: isTech ? null : imgCache.obstacles[0]
         });
     }
+}
+
+function triggerBSOD() {
+    gameState = 'GAMEOVER';
+    bgMusic.pause();
+    document.getElementById('bsod').style.display = 'block';
+    setTimeout(() => {
+        document.getElementById('bsod').style.display = 'none';
+    }, 2000);
 }
 
 function draw() {
@@ -124,7 +139,6 @@ function draw() {
         }
         if (!p.passed && p.x < 150) {
             p.passed = true; shake = 20; dimensionHue += 72;
-            document.getElementById('status').innerText = "DIMENSION SHIFTED";
         }
         if (p.x < -350) backgroundProps.splice(i, 1);
     });
@@ -149,34 +163,35 @@ function loop() {
         jumpHeight -= yVelocity; yVelocity += gravity;
         if (jumpHeight <= 0) { jumpHeight = 0; yVelocity = 0; }
 
-        // Azul Run Cycle
         const aFrame = Math.floor(frame / 6) % 4;
         if (imgCache.azul[aFrame].complete) {
             ctx.drawImage(imgCache.azul[aFrame], 100, floorY - 110 - jumpHeight, 90, 115);
         }
 
-        // Game Objects (Tech & Obstacles)
         gameObjects.forEach((obj, i) => {
             obj.x -= gameSpeed;
-            if (obj.x < 160 && obj.x > 80 && jumpHeight < 45) {
+            if (obj.x < 160 && obj.x > 80 && jumpHeight < 55) {
                 if (obj.type === 'tech') { score += 100; gameObjects.splice(i, 1); }
-                else { gameState = 'GAMEOVER'; bgMusic.pause(); }
+                else { triggerBSOD(); }
             }
             
             if (obj.type === 'tech') {
                 ctx.font = "40px Arial";
                 ctx.fillText(obj.emoji, obj.x, obj.y + 40);
             } else if (obj.img && obj.img.complete) {
+                // Flicker effect for PC screen
+                ctx.save();
+                if (Math.random() > 0.9) ctx.filter = "brightness(2) contrast(2)";
                 ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+                ctx.restore();
             }
-            
             if (obj.x < -100) gameObjects.splice(i, 1);
         });
         document.getElementById('score').innerText = `DIMENSION: ${score}`;
     } else {
         ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width, canvas.height);
         ctx.fillStyle = "#0ff"; ctx.textAlign = "center"; ctx.font = "18px Courier";
-        ctx.fillText(gameState === 'START' ? "TAP TO INJECT INFINITY" : "CONNECTION LOST - TAP TO RE-SYNC", canvas.width/2, canvas.height/2);
+        ctx.fillText(gameState === 'START' ? "TAP TO INJECT INFINITY" : "REBOOTING SIMULATION...", canvas.width/2, canvas.height/2);
     }
     ctx.restore();
     requestAnimationFrame(loop);
@@ -186,9 +201,7 @@ window.addEventListener('touchstart', (e) => {
     if (gameState !== 'PLAYING') {
         gameState = 'PLAYING'; score = 0; frame = 0; gameObjects = []; backgroundProps = [];
         dimensionHue = 0;
-        bgMusic.loop = true; // Still setting it, but the 'ended' listener is our backup
-        bgMusic.play();
-        document.getElementById('status').innerText = "SYSTEMS NOMINAL";
+        bgMusic.play().catch(e => console.log("Audio unlock required"));
     } else if (jumpHeight === 0) yVelocity = -22;
     e.preventDefault();
 }, {passive: false});
