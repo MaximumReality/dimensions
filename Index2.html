@@ -10,46 +10,44 @@ body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
 
 .ui-layer { position:absolute; top:env(safe-area-inset-top); left:20px; color:#0ff; font-family:'Courier New', monospace; z-index:100; pointer-events:none; text-shadow:0 0 8px #0ff; }
 #score { font-size:24px; font-weight:bold; }
+#highScore { font-size:14px; opacity:0.8; margin-top:5px; }
 
 .controls { position:absolute; top:env(safe-area-inset-top); right:20px; display:flex; gap:15px; z-index:150; }
 .btn { font-size:24px; background:rgba(0,255,255,0.15); border:1.5px solid #0ff; border-radius:8px; padding:8px; color:#0ff; cursor:pointer; backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; }
 .home-btn { text-decoration:none; }
 
 #bsod { position:fixed; top:0; left:0; width:100%; height:100%; background:#0000aa; color:#fff; font-family:'Courier New'; display:none; z-index:200; padding:50px; box-sizing:border-box; }
-
 </style>
 </head>
 <body>
 <div id="bsod">
-    <h1>:(</h1>
-    <p>CRITICAL_DIMENSION_ERROR</p>
-    <p>REBOOTING SIMULATION...</p>
+<h1>:(</h1>
+<p>CRITICAL_DIMENSION_ERROR</p>
+<p>REBOOTING SIMULATION...</p>
 </div>
 
 <div class="controls">
-    <a href="https://MaximumReality.xyz" class="btn home-btn">🏠</a>
-    <div id="muteBtn" class="btn">🔊</div>
-    <div id="pauseBtn" class="btn">⏯️</div>
+<a href="https://MaximumReality.xyz" class="btn home-btn">🏠</a>
+<div id="muteBtn" class="btn">🔊</div>
+<div id="pauseBtn" class="btn">⏯️</div>
 </div>
 
 <div class="ui-layer">
-    <div id="score">DIMENSION: 0</div>
-    <div id="highScore">BEST: 0</div>
+<div id="score">DIMENSION: 0</div>
+<div id="highScore">BEST: 0</div>
 </div>
+
 <canvas id="gameCanvas"></canvas>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const bgMusic = new Audio('password-infinity.mp3'); bgMusic.loop=true;
 
-const bgMusic = new Audio('password-infinity.mp3');
-bgMusic.loop = true;
-
-let isMuted=false, isPaused=false;
-let gameState='START', score=0, frame=0, gameSpeed=7;
-let jumpHeight=0, yVelocity=0, shake=0, dimensionHue=0;
+// STATE
+let isMuted=false, isPaused=false, gameState='START', score=0, frame=0, gameSpeed=7;
+let jumpHeight=0, yVelocity=0, floorY, highScore=localStorage.getItem('maxRealityHighScore')||0;
 const gravity=1.2, GROUND_Y_OFFSET=100;
-let floorY, highScore = localStorage.getItem('maxRealityHighScore') || 0;
 
 const ASSETS = {
     bg:'gg-bg.png',
@@ -61,134 +59,104 @@ const ASSETS = {
 };
 
 const LOOT_ASSETS = ['power-supply.png','2tb.png','curve-keyboard.png','motherboard.png','ssd.png','graphics-card.png','circuitpython.png'];
+const imgCache={loot:[]};
 
-const imgCache = { loot:[] };
+// PARTICLE ENGINE
+let particles=[]; class Particle{constructor(x,y,color,text=null){this.x=x;this.y=y;this.char=text||Math.random()>0.5?"0":"1";this.size=text?28:Math.random()*10+12;this.speedX=(Math.random()-0.5)*10;this.speedY=(Math.random()-0.5)*10;this.color=color;this.life=1.0;} update(){this.x+=this.speedX; this.y+=this.speedY; this.life-=0.02;} draw(){ctx.save(); ctx.fillStyle=this.color; ctx.globalAlpha=this.life; ctx.font=`bold ${this.size}px monospace`; ctx.fillText(this.char,this.x,this.y); ctx.restore();}}
 
-let particles = [];
-class Particle {
-    constructor(x,y,color,text=null){
-        this.x=x; this.y=y; this.char=text|| (Math.random()>0.5?"0":"1");
-        this.size=text?28:Math.random()*10+12;
-        this.speedX=(Math.random()-0.5)*10;
-        this.speedY=(Math.random()-0.5)*10;
-        this.color=color; this.life=1.0;
-    }
-    update(){ this.x+=this.speedX; this.y+=this.speedY; this.life-=0.02; }
-    draw(){ ctx.save(); ctx.fillStyle=this.color; ctx.globalAlpha=this.life; ctx.font=`bold ${this.size}px monospace`; ctx.fillText(this.char,this.x,this.y); ctx.restore(); }
-}
-
+// LOAD IMAGES
 function load(){
-    Object.keys(ASSETS).forEach(k=>{
-        if(Array.isArray(ASSETS[k])){
-            imgCache[k]=ASSETS[k].map(src=>{ let i=new Image(); i.src=src; return i; });
-        } else { imgCache[k]=new Image(); imgCache[k].src=ASSETS[k]; }
-    });
-    LOOT_ASSETS.forEach(src=>{ let i=new Image(); i.src=src; imgCache.loot.push(i); });
+Object.keys(ASSETS).forEach(key=>{
+if(Array.isArray(ASSETS[key])) imgCache[key]=ASSETS[key].map(src=>{let i=new Image(); i.src=src; return i;});
+else imgCache[key]=new Image(); imgCache[key].src=ASSETS[key];
+});
+LOOT_ASSETS.forEach(src=>{let i=new Image(); i.src=src; imgCache.loot.push(i);});
 }
 
-let drops=[];
-function initMatrix(){ drops = Array(Math.floor(canvas.width/20)).fill(1); }
+// MATRIX RAIN
+let drops=[]; let hue=0;
+function initMatrix(){ const columns=Math.floor(canvas.width/20); drops=Array(columns).fill(1);}
+function drawMatrix(){ ctx.save(); ctx.font="bold 18px monospace"; drops.forEach((y,i)=>{ ctx.fillStyle=`hsl(${hue},100%,50%)`; ctx.fillText(Math.random()>0.5?"1":"0", i*20, y*20); if(y*20>canvas.height && Math.random()>0.975)drops[i]=0; drops[i]++; }); ctx.restore();}
 
+// RESIZE
 function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; floorY=canvas.height-GROUND_Y_OFFSET; initMatrix(); }
+window.addEventListener('resize',resize); resize();
 
-document.getElementById('muteBtn').addEventListener('touchstart',e=>{ e.stopPropagation(); isMuted=!isMuted; bgMusic.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊'; },{passive:false});
-document.getElementById('pauseBtn').addEventListener('touchstart',e=>{ e.stopPropagation(); isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff'; },{passive:false});
+// UI HANDLERS
+document.getElementById('muteBtn').addEventListener('touchstart',e=>{e.stopPropagation(); isMuted=!isMuted; bgMusic.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊';},{passive:false});
+document.getElementById('pauseBtn').addEventListener('touchstart',e=>{e.stopPropagation(); isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff';},{passive:false});
 
-function triggerBSOD(){
-    gameState='GAMEOVER'; bgMusic.pause();
-    if(score>highScore){ highScore=score; localStorage.setItem('maxRealityHighScore',highScore); }
-    document.getElementById('bsod').style.display='block';
-    setTimeout(()=>{ document.getElementById('bsod').style.display='none'; gameState='START'; },2000);
-}
+// BSOD
+function triggerBSOD(){ gameState='GAMEOVER'; bgMusic.pause(); if(score>highScore){highScore=score; localStorage.setItem('maxRealityHighScore',highScore);} document.getElementById('bsod').style.display='block'; setTimeout(()=>{document.getElementById('bsod').style.display='none'; gameState='START';},2000);}
 
-let gameObjects=[];
-function spawn(){
-    if(frame%85===0){
-        const isLoot=Math.random()>0.4;
-        gameObjects.push({
-            x:canvas.width+100, y:floorY-90, w:80, h:80,
-            type:isLoot?'tech':'obstacle',
-            img:isLoot?imgCache.loot[Math.floor(Math.random()*imgCache.loot.length)]:imgCache.obstacles[0]
-        });
-    }
-}
+// GAME OBJECTS
+let gameObjects=[]; function spawn(){if(frame%85===0){const isLoot=Math.random()>0.4; gameObjects.push({x:canvas.width+100, y:floorY-90, w:80,h:80, type:isLoot?'tech':'obstacle', img:isLoot?imgCache.loot[Math.floor(Math.random()*imgCache.loot.length)]:imgCache.obstacles[0]});}}
 
+// DRAW BACKGROUND
 function drawBackground(){
-    if(imgCache.bg.complete) ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
-    // lori blur as visual only
-    if(imgCache.loriBlur.complete){ ctx.save(); ctx.globalAlpha=0.4; let lX=-(frame*0.5)%canvas.width; ctx.drawImage(imgCache.loriBlur,lX,0,canvas.width,canvas.height); ctx.drawImage(imgCache.loriBlur,lX+canvas.width,0,canvas.width,canvas.height); ctx.restore(); }
-    // buildings
-    const layers = [{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
-    layers.forEach(l=>{ if(l.img.complete){ ctx.save(); let x=-(frame*l.s)%canvas.width; ctx.globalAlpha=l.op; ctx.filter=`hue-rotate(${dimensionHue}deg)`; ctx.drawImage(l.img,x,floorY-l.h,canvas.width,l.h); ctx.drawImage(l.img,x+canvas.width,floorY-l.h,canvas.width,l.h); ctx.restore(); } });
-    
-    // matrix rain with cycling hue
-    ctx.save();
-    ctx.fillStyle = `hsla(${dimensionHue},100%,50%,0.8)`; ctx.font="bold 18px monospace";
-    drops.forEach((y,i)=>{ ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20); if(y*20>canvas.height && Math.random()>0.975)drops[i]=0; drops[i]++; });
-    ctx.restore();
-    
-    // solid ground
-    ctx.save(); ctx.fillStyle="#111"; ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET); ctx.restore();
-    
-    // floor image tiles on top if loaded
-    if(imgCache.floor.complete){ let fX=-(frame*gameSpeed)%100; for(let i=-1;i<(canvas.width/100)+2;i++)ctx.drawImage(imgCache.floor,(i*100)+fX,floorY,100,GROUND_Y_OFFSET); }
+if(imgCache.bg.complete) ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
+if(imgCache.loriBlur.complete){ctx.save(); ctx.globalAlpha=0.4; ctx.drawImage(imgCache.loriBlur,0,0,canvas.width,canvas.height); ctx.restore();}
+const layers=[{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
+layers.forEach(l=>{if(l.img.complete){ctx.save(); let x=-(frame*l.s)%canvas.width; ctx.globalAlpha=l.op; ctx.filter=`hue-rotate(${hue}deg)`; ctx.drawImage(l.img,x,floorY-l.h,canvas.width,l.h); ctx.drawImage(l.img,x+canvas.width,floorY-l.h,canvas.width,l.h); ctx.restore();}});
+drawMatrix();
+// SOLID GROUND
+ctx.fillStyle="#111"; ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET);
 }
 
+// LOOP
+let landing=false;
 function loop(){
-    if(isPaused){ requestAnimationFrame(loop); return; }
-    ctx.save(); if(shake>0){ ctx.translate(Math.random()*shake,Math.random()*shake); shake*=0.85; }
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+if(isPaused){requestAnimationFrame(loop); return;}
+ctx.save();
+if(landing){ctx.translate((Math.random()-0.5)*6,(Math.random()-0.5)*6); landing=false;}
+ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    drawBackground();
+drawBackground();
 
-    particles.forEach((p,i)=>{ p.update(); p.draw(); if(p.life<=0)particles.splice(i,1); });
+// PARTICLES
+particles.forEach((p,i)=>{p.update(); p.draw(); if(p.life<=0) particles.splice(i,1);});
 
-    if(gameState==='PLAYING'){
-        frame++; spawn();
+// GAME LOGIC
+if(gameState==='PLAYING'){
+frame++; spawn();
+jumpHeight-=yVelocity; yVelocity+=gravity;
+let justLanded=false;
+if(jumpHeight<=0){ if(yVelocity>0){justLanded=true;} jumpHeight=0;yVelocity=0;}
+const aFrame=Math.floor(frame/6)%4;
+ctx.drawImage(imgCache.azul[aFrame],100,floorY-110-jumpHeight,90,115);
 
-        jumpHeight-=yVelocity; yVelocity+=gravity;
+gameObjects.forEach((obj,i)=>{
+obj.x-=gameSpeed;
+if(obj.x<160 && obj.x>80 && jumpHeight<70){
+if(obj.type==='tech'){score+=100; hue+=20; for(let j=0;j<10;j++) particles.push(new Particle(obj.x,obj.y,`hsl(${hue},100%,50%)`)); gameObjects.splice(i,1);}
+else triggerBSOD();
+}
+if(obj.img) ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
+if(obj.x<-100) gameObjects.splice(i,1);
+});
 
-        // brief shake only on landing
-        if(jumpHeight<=0){
-            if(yVelocity>0) shake=15; // landing glitch
-            jumpHeight=0; yVelocity=0;
-        }
+document.getElementById('score').innerText=`DIMENSION: ${score}`;
+document.getElementById('highScore').innerText=`BEST: ${highScore}`;
+if(justLanded) landing=true;
+hue=(hue+1)%360;
 
-        const aFrame=Math.floor(frame/6)%4;
-        ctx.drawImage(imgCache.azul[aFrame],100,floorY-110-jumpHeight,90,115);
-
-        gameObjects.forEach((obj,i)=>{
-            obj.x-=gameSpeed;
-            if(obj.x<160 && obj.x>80 && jumpHeight<70){
-                if(obj.type==='tech'){
-                    score+=100; dimensionHue+=20;
-                    for(let j=0;j<10;j++)particles.push(new Particle(obj.x,obj.y,`hsl(${dimensionHue},100%,50%)`));
-                    gameObjects.splice(i,1);
-                } else { triggerBSOD(); }
-            }
-            if(obj.img)ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
-            if(obj.x<-100)gameObjects.splice(i,1);
-        });
-
-        document.getElementById('score').innerText=`DIMENSION: ${score}`;
-        document.getElementById('highScore').innerText=`BEST: ${highScore}`;
-    } else {
-        ctx.fillStyle="rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.fillStyle="#0ff"; ctx.textAlign="center"; ctx.font="24px Courier";
-        ctx.fillText("TAP TO INJECT CODE",canvas.width/2,canvas.height/2);
-    }
-
-    ctx.restore(); requestAnimationFrame(loop);
+}else{
+ctx.fillStyle="rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width,canvas.height);
+ctx.fillStyle="#0ff"; ctx.textAlign="center"; ctx.font="24px Courier";
+ctx.fillText("TAP TO INJECT CODE",canvas.width/2,canvas.height/2);
+}
+ctx.restore(); requestAnimationFrame(loop);
 }
 
+// TOUCH / JUMP
 window.addEventListener('touchstart',e=>{
-    if(e.target.closest('.btn')) return;
-    if(gameState!=='PLAYING'){ gameState='PLAYING'; score=0; frame=0; gameObjects=[]; bgMusic.play().catch(()=>{}); }
-    else if(jumpHeight===0)yVelocity=-22;
-    e.preventDefault();
+if(e.target.closest('.btn')) return;
+if(gameState!=='PLAYING'){gameState='PLAYING'; score=0; frame=0; gameObjects=[]; bgMusic.play();}
+else if(jumpHeight===0) yVelocity=-22;
+e.preventDefault();
 },{passive:false});
 
-load(); resize(); window.addEventListener('resize',resize); loop();
+load(); loop();
 </script>
 </body>
 </html>
