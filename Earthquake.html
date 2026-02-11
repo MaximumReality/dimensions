@@ -269,7 +269,10 @@ function loop(){
     requestAnimationFrame(loop);
 }
 
-if(gameState!=='PLAYING'){
+window.addEventListener('touchstart',e=>{
+    if(e.target.closest('.btn')) return;
+
+    if(gameState!=='PLAYING'){
     gameState='PLAYING';
     score=0;
     frame=0;
@@ -279,6 +282,10 @@ if(gameState!=='PLAYING'){
     portalActive=false; // ✅ safety reset
     bgMusic.play();
 }
+    else if(jumpHeight===0) yVelocity=-22;
+
+    e.preventDefault();
+},{passive:false});
 resize(); window.addEventListener('resize',resize);
 loop();
 </script>
