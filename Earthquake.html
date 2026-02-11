@@ -73,7 +73,8 @@ let gameState='START', score=0, frame=0, gameSpeed=7;
 let jumpHeight=0, yVelocity=0, shake=0, dimensionHue=0;
 const gravity=1.2, GROUND_Y_OFFSET=100;
 let floorY, highScore=localStorage.getItem('maxRealityHighScore')||0;
-
+let shake = 0;
+    
 // ASSETS
 const ASSETS={
     bg:'gg-bg.png',
@@ -218,6 +219,13 @@ let bonusCount=0;
 function loop(){
     if(isPaused){requestAnimationFrame(loop);return;}
     ctx.save();
+    if(shake > 0){
+    ctx.translate(
+        (Math.random() - 0.5) * shake,
+        (Math.random() - 0.5) * shake
+    );
+    shake *= 0.85;  // decay speed (lower = longer quake)
+}
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
     drawBackground();
@@ -230,8 +238,10 @@ function loop(){
         jumpHeight-=yVelocity; yVelocity+=gravity;
         let landed=false;
         if(jumpHeight<=0){jumpHeight=0;yVelocity=0;landed=true;}
-        // SUBTLE LANDING SHAKE
-        if(landed && yVelocity!==0){ctx.translate(Math.random()*3-1.5,Math.random()*3-1.5);}
+        // EARTHQUAKE ON LANDING
+if(landed){
+    shake = 15;   // strength (try 10–25 depending how wild you want)
+}
 
         const aFrame=Math.floor(frame/6)%4;
         ctx.drawImage(imgCache.azul[aFrame],100,floorY-110-jumpHeight,90,115);
