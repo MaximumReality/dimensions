@@ -53,18 +53,18 @@
 <canvas id="gameCanvas"></canvas>
 
 <script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const bgMusic = new Audio('password-infinity.mp3'); bgMusic.loop = true;
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+const bgMusic=new Audio('password-infinity.mp3'); bgMusic.loop=true;
 
-// STATE
 let isMuted=false, isPaused=false;
 let gameState='START', score=0, frame=0, gameSpeed=7;
 let jumpHeight=0, yVelocity=0, shake=0, dimensionHue=0;
 const gravity=1.2, GROUND_Y_OFFSET=100;
-let floorY, highScore = localStorage.getItem('maxRealityHighScore')||0;
+let floorY, highScore=localStorage.getItem('maxRealityHighScore')||0;
 
-const ASSETS = {
+// Assets
+const ASSETS={
     bg:'gg-bg.png',
     floor:'floor.png',
     azul:['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
@@ -75,9 +75,9 @@ const ASSETS = {
 const imgCache={loot:[]};
 const LOOT_ASSETS=['power-supply.png','2tb.png','curve-keyboard.png','motherboard.png','ssd.png','graphics-card.png','circuitpython.png'];
 
-// PARTICLES
+// Particle
 let particles=[];
-class Particle {
+class Particle{
     constructor(x,y,color,text=null){
         this.x=x; this.y=y; this.char=text||(Math.random()>0.5?"0":"1");
         this.size=text?28:Math.random()*10+12;
@@ -90,7 +90,7 @@ class Particle {
     }
 }
 
-// LOAD ASSETS
+// Load assets
 function load(){
     Object.keys(ASSETS).forEach(key=>{
         if(Array.isArray(ASSETS[key])) imgCache[key]=ASSETS[key].map(src=>{let i=new Image(); i.src=src; return i;});
@@ -99,14 +99,14 @@ function load(){
     LOOT_ASSETS.forEach(src=>{ let i=new Image(); i.src=src; imgCache.loot.push(i); });
 }
 
-// MATRIX
+// Matrix rain
 let drops=[];
 function initMatrix(){
     const columns=Math.floor(canvas.width/20);
     drops=Array(columns).fill(1);
 }
 
-// RESIZE
+// Resize
 function resize(){
     canvas.width=window.innerWidth;
     canvas.height=window.innerHeight;
@@ -114,12 +114,11 @@ function resize(){
     initMatrix();
 }
 
-// UI HANDLERS
+// UI
 document.getElementById('muteBtn').addEventListener('touchstart',e=>{
     e.stopPropagation(); isMuted=!isMuted; bgMusic.muted=isMuted;
     document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊';
 },{passive:false});
-
 document.getElementById('pauseBtn').addEventListener('touchstart',e=>{
     e.stopPropagation(); isPaused=!isPaused;
     document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff';
@@ -133,33 +132,29 @@ function triggerBSOD(){
     setTimeout(()=>{ document.getElementById('bsod').style.display='none'; gameState='START'; },2000);
 }
 
-// SPAWN OBJECTS
-let gameObjects=[];
+// Objects
+let gameObjects=[], loriCollect=false;
 function spawn(){
     if(frame%85===0){
-        const isLoot=Math.random()>0.4;
-        gameObjects.push({
-            x:canvas.width+100, y:floorY-90, w:80, h:80,
-            type:isLoot?'tech':'obstacle',
-            img:isLoot?imgCache.loot[Math.floor(Math.random()*imgCache.loot.length)]:imgCache.obstacles[0]
-        });
+        const roll=Math.random();
+        if(roll>0.7){ // lori-blur collectible
+            gameObjects.push({x:canvas.width+100, y:floorY-350, w:220, h:350, type:'lori-blur', img:imgCache.loriBlur});
+        } else {
+            const isLoot=Math.random()>0.4;
+            gameObjects.push({
+                x:canvas.width+100, y:floorY-90, w:80, h:80,
+                type:isLoot?'tech':'obstacle',
+                img:isLoot?imgCache.loot[Math.floor(Math.random()*imgCache.loot.length)]:imgCache.obstacles[0]
+            });
+        }
     }
 }
 
-// DRAW BACKGROUND
+// Draw background/floor
 function drawBackground(){
     if(imgCache.bg.complete) ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
 
-    // LORI BLUR
-    if(imgCache.loriBlur.complete){
-        ctx.save(); ctx.globalAlpha=0.4;
-        let lX=-(frame*0.5)%canvas.width;
-        ctx.drawImage(imgCache.loriBlur,lX,0,canvas.width,canvas.height);
-        ctx.drawImage(imgCache.loriBlur,lX+canvas.width,0,canvas.width,canvas.height);
-        ctx.restore();
-    }
-
-    // BUILDINGS
+    // Buildings
     const layers=[{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
     layers.forEach(l=>{
         if(l.img.complete){
@@ -171,8 +166,8 @@ function drawBackground(){
         }
     });
 
-    // MATRIX
-    ctx.save(); ctx.fillStyle="rgba(0,255,255,0.8)"; ctx.font="bold 18px monospace";
+    // Matrix
+    ctx.save(); ctx.fillStyle=`hsla(${dimensionHue},100%,50%,0.8)`; ctx.font="bold 18px monospace";
     drops.forEach((y,i)=>{
         ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20);
         if(y*20>canvas.height && Math.random()>0.975) drops[i]=0;
@@ -180,18 +175,16 @@ function drawBackground(){
     });
     ctx.restore();
 
-    // FLOOR LAST
+    // Floor
     if(imgCache.floor.complete){
         let fX=-(frame*gameSpeed)%100;
         for(let i=-1;i<(canvas.width/100)+2;i++){
             ctx.drawImage(imgCache.floor,(i*100)+fX,floorY,100,GROUND_Y_OFFSET);
         }
-    } else { // fallback
-        ctx.fillStyle="#111"; ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET);
-    }
+    } else { ctx.fillStyle="#111"; ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET); }
 }
 
-// GAME LOOP
+// Game loop
 function loop(){
     if(isPaused){ requestAnimationFrame(loop); return; }
     ctx.save();
@@ -205,20 +198,30 @@ function loop(){
     if(gameState==='PLAYING'){
         frame++; spawn();
         jumpHeight-=yVelocity; yVelocity+=gravity;
-        if(jumpHeight<=0){ jumpHeight=0; yVelocity=0; }
+        if(jumpHeight<=0){ jumpHeight=0; yVelocity=0; loriCollect=false; }
 
         const aFrame=Math.floor(frame/6)%4;
-        ctx.drawImage(imgCache.azul[aFrame],100,floorY-115-jumpHeight,90,115); // Azul stands on floor
+        ctx.drawImage(imgCache.azul[aFrame],100,floorY-115-jumpHeight,90,115);
 
         gameObjects.forEach((obj,i)=>{
             obj.x-=gameSpeed;
-            if(obj.x<160 && obj.x>80 && jumpHeight<70){
-                if(obj.type==='tech'){
-                    score+=100; dimensionHue+=5;
+
+            if(obj.type==='lori-blur'){
+                if(obj.x<160 && obj.x>80){
+                    loriCollect=true;
+                    dimensionHue=(dimensionHue+120)%360; // change rain color
+                    gameObjects.splice(i,1);
+                }
+            } else if(obj.type==='obstacle'){
+                if(obj.x<160 && obj.x>80 && jumpHeight<70 && !loriCollect){ triggerBSOD(); }
+            } else if(obj.type==='tech'){
+                if(obj.x<160 && obj.x>80){
+                    score+=100;
                     for(let j=0;j<10;j++) particles.push(new Particle(obj.x,obj.y,"#0ff"));
                     gameObjects.splice(i,1);
-                } else { triggerBSOD(); }
+                }
             }
+
             if(obj.img) ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
             if(obj.x<-100) gameObjects.splice(i,1);
         });
@@ -235,7 +238,7 @@ function loop(){
     requestAnimationFrame(loop);
 }
 
-// TOUCH / JUMP
+// Touch
 window.addEventListener('touchstart',e=>{
     if(e.target.closest('.btn')) return;
     if(gameState!=='PLAYING'){ gameState='PLAYING'; score=0; frame=0; gameObjects=[]; bgMusic.play().catch(()=>{}); }
