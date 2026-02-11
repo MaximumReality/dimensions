@@ -74,7 +74,7 @@ let isMuted=false, isPaused=false, gameState='START';
 let score=0, frame=0, gameSpeed=7, dimensionHue=0;
 let jumpHeight=0, yVelocity=0, shake=0, bonusCount=0;
 let currentZone='CYBER', portalActive=false, beastModePlayed=false;
-
+let lastPortalScore = 0;
 const gravity = 1.2, GROUND_Y_OFFSET=100;
 let floorY, highScore=localStorage.getItem('maxRealityHighScore')||0;
 
@@ -144,24 +144,38 @@ function triggerBSOD(){
 
 // SPAWNING
 let gameObjects=[];
-function spawn(){
-    // Portal every 5000 points
-    if(!portalActive && score>0 && score%5000===0){
-        portalActive=true;
-        gameObjects.push({x:canvas.width+100, y:floorY-140, w:120, h:140, type:'portal', img:imgCache.portal});
-        return;
-    }
-    // Loot and obstacles
-    const lootPool=currentZone==='SNACK'?SNACK_LOOT:OUTSIDE_LOOT;
-    if(frame%85===0){
-        const isLoot=Math.random()>0.4;
+let lastPortalScore = 0;
+
+function spawn() {
+    // Only spawn a portal if we crossed a new 5000-point threshold
+    if(score >= 5000 && score - lastPortalScore >= 5000 && !portalActive) {
+    portalActive = true;
+    lastPortalScore = score;
+    gameObjects.push({
+        x: canvas.width + 100,
+        y: floorY - 140,
+        w: 120,
+        h: 140,
+        type: 'portal',
+        img: imgCache.portal
+    });
+    return;
+}
+
+    // Spawn loot/obstacles normally
+    if(frame % 80 === 0) {
+        const isLoot = Math.random() > 0.4;
         gameObjects.push({
-            x:canvas.width+100, y:floorY-90, w:80, h:80,
-            type:isLoot?'tech':'obstacle',
-            img:isLoot?imgCache.loot[Math.floor(Math.random()*imgCache.loot.length)]:imgCache.obstacles[0]
+            x: canvas.width + 100,
+            y: floorY - 85,
+            w: 80,
+            h: 80,
+            type: isLoot ? 'tech' : 'obstacle',
+            img: isLoot ? imgCache.loot[Math.floor(Math.random() * imgCache.loot.length)] : imgCache.obstacles[0]
         });
     }
 }
+
 
 // DRAW BACKGROUND
 let inStore=false;
