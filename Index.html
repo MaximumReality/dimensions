@@ -3,23 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Maximum Reality: HackerCat Paradise</title>
+    <title>Maximum Reality: Binary Infinity</title>
     <style>
-        body, html { 
-            margin: 0; padding: 0; width: 100%; height: 100%; 
-            overflow: hidden; background: #000;
-            -webkit-user-select: none; touch-action: none;
-        }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; -webkit-user-select: none; touch-action: none; }
         #gameCanvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
         .ui-layer {
             position: absolute; top: env(safe-area-inset-top); left: 20px;
             color: #0ff; font-family: 'Courier New', monospace;
             z-index: 100; pointer-events: none; text-shadow: 0 0 8px #0ff;
         }
-        #score { font-size: 24px; font-weight: bold; }
+        #score { font-size: 24px; font-weight: bold; transition: transform 0.1s; }
         #highScore { font-size: 14px; opacity: 0.8; }
-        .new-record { color: #fff; text-shadow: 0 0 15px #fff, 0 0 25px #0ff; animation: pulse 0.5s infinite alternate; }
-        @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.05); } }
+        
+        /* NEW RECORD PULSE */
+        @keyframes pulseRecord { 
+            0% { transform: scale(1); color: #0ff; text-shadow: 0 0 5px #0ff; }
+            50% { transform: scale(1.1); color: #fff; text-shadow: 0 0 20px #fff, 0 0 30px #0ff; }
+            100% { transform: scale(1); color: #0ff; text-shadow: 0 0 5px #0ff; }
+        }
+        .new-record-anim { animation: pulseRecord 0.6s infinite; }
+
         #bsod {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #0000aa; color: #fff; font-family: 'Courier New';
@@ -30,14 +33,14 @@
 <body>
     <div id="bsod">
         <h1>:(</h1>
-        <p>CRITICAL_PROCESS_DIED</p>
-        <p>ERROR: ILLEGAL_HARDWARE_ACCESS (old-pc.png)</p>
+        <p>CRITICAL_DIMENSION_ERROR</p>
         <p>REBOOTING SIMULATION...</p>
     </div>
     <div class="ui-layer">
         <div id="score">DIMENSION: 0</div>
+        <div id="multiplier">X1</div>
         <div id="highScore">BEST: 0</div>
-        <div id="status">AZUL_INIT...</div>
+        <div id="status">AZUL_ACTIVE...</div>
     </div>
     <canvas id="gameCanvas"></canvas>
 
@@ -62,40 +65,17 @@ const ASSETS = {
     portal: 'snack-portal.png'
 };
 
-const LOOT_HARDWARE = [
-    'power-supply.png', '2tb.png', 'curve-keyboard.png', 'motherboard.png',
-    'optical-drive.png', 'core-i7.png', 'ram.png', 'cpu-water-cooler.png',
-    'ssd.png', 'core-i9.png', 'card.png', 'graphics-card.png', 'circuitpython.png'
-];
-
-const LOOT_SNACKS = [
-    'taco.png', 'soda.png', 'hotdog.png', 'roast-chicken.png', 'chips.png', 'pink-donut.png'
-];
+const LOOT_HARDWARE = ['power-supply.png', '2tb.png', 'curve-keyboard.png', 'motherboard.png', 'ssd.png', 'graphics-card.png', 'circuitpython.png'];
+const LOOT_SNACKS = ['taco.png', 'soda.png', 'hotdog.png', 'roast-chicken.png', 'chips.png', 'pink-donut.png'];
 
 let gameState = 'START', currentZone = 'CYBER'; 
-let score = 0, frame = 0, gameSpeed = 7, snackX = 0;
-let lastPortalMilestone = 0;
+let score = 0, combo = 1, frame = 0, gameSpeed = 7, snackX = 0;
+let lastPortalMilestone = 0, portalActive = false;
 let jumpHeight = 0, yVelocity = 0, shake = 0, dimensionHue = 0;
+let timeScale = 1.0, glitchTimer = 0;
+let coyoteFrames = 0; // Coyote Time counter
 const gravity = 1.2, imgCache = { loot: [], snacks: [] };
 let particles = [], gameObjects = [], backgroundProps = [];
-
-class Particle {
-    constructor(x, y, color, text = null) {
-        this.x = x; this.y = y;
-        this.char = text || ["0", "1"][Math.floor(Math.random() * 2)];
-        this.size = text ? 28 : Math.random() * 10 + 12;
-        this.speedX = text ? 0 : (Math.random() - 0.5) * 12;
-        this.speedY = text ? -4 : (Math.random() - 0.5) * 12;
-        this.color = color;
-        this.life = 1.0;
-    }
-    update() { this.x += this.speedX; this.y += this.speedY; this.life -= 0.025; }
-    draw() {
-        ctx.save(); ctx.fillStyle = this.color; ctx.globalAlpha = this.life;
-        ctx.font = `bold ${this.size}px monospace`;
-        ctx.fillText(this.char, this.x, this.y); ctx.restore();
-    }
-}
 
 function load() {
     Object.keys(ASSETS).forEach(key => {
@@ -110,51 +90,31 @@ function load() {
 }
 load();
 
-let columns, drops = [];
-function initMatrix() {
-    columns = Math.floor(canvas.width / 20);
-    drops = Array(columns).fill(1);
-}
-
-function drawMatrix() {
-    ctx.save();
-    ctx.fillStyle = `hsla(${dimensionHue + 120}, 100%, 50%, 0.8)`;
-    ctx.shadowBlur = 8; ctx.shadowColor = `hsla(${dimensionHue + 120}, 100%, 50%, 1)`;
-    ctx.font = "bold 18px monospace";
-    for (let i = 0; i < drops.length; i++) {
-        const text = "0123456789ABCDEF"[Math.floor(Math.random() * 16)];
-        ctx.fillText(text, i * 20, drops[i] * 20);
-        if (drops[i] * 20 > canvas.height && Math.random() > 0.975) drops[i] = 0;
-        drops[i]++;
-    }
-    ctx.restore();
-}
-
 function resize() { 
     canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-    floorY = canvas.height - GROUND_Y_OFFSET; initMatrix();
+    floorY = canvas.height - GROUND_Y_OFFSET;
 }
 window.addEventListener('resize', resize); resize();
 
 function toggleZone() {
+    glitchTimer = 20; // Trigger glitch distortion
     if (currentZone === 'CYBER') {
         currentZone = 'SNACK'; gameSpeed = 12;
-        document.getElementById('status').innerText = "SNACK ATTACK MODE!";
+        document.getElementById('status').innerText = "SNACK ATTACK!";
     } else {
         currentZone = 'CYBER'; gameSpeed = 7;
-        document.getElementById('status').innerText = "RE-ENTERING MATRIX...";
+        document.getElementById('status').innerText = "BACK TO CODE...";
     }
+    timeScale = 1.0;
     gameObjects = [];
 }
 
 function spawn() {
     const milestone = Math.floor(score / 1000) * 1000;
-    if (score >= 1000 && milestone > lastPortalMilestone) {
+    if (score >= 1000 && milestone > lastPortalMilestone && !portalActive) {
         lastPortalMilestone = milestone;
-        gameObjects.push({ 
-            x: canvas.width + 100, y: floorY - 140, w: 120, h: 140, 
-            type: 'portal', img: imgCache.portal 
-        });
+        portalActive = true;
+        gameObjects.push({ x: canvas.width + 100, y: floorY - 140, w: 120, h: 140, type: 'portal', img: imgCache.portal });
     }
     
     if (frame % 80 === 0) {
@@ -167,120 +127,115 @@ function spawn() {
             img: isLoot ? currentList[idx] : imgCache.obstacles[0]
         });
     }
-    
-    if (currentZone === 'CYBER' && Math.random() > 0.993) {
-        backgroundProps.push({ x: canvas.width + 200, y: floorY - 350, w: 220, h: 350, passed: false });
-    }
-}
-
-function triggerBSOD() {
-    gameState = 'GAMEOVER'; bgMusic.pause();
-    if (score > highScore) { highScore = score; localStorage.setItem('maxRealityHighScore', highScore); }
-    document.getElementById('bsod').style.display = 'block';
-    setTimeout(() => { document.getElementById('bsod').style.display = 'none'; }, 2000);
-}
-
-function draw() {
-    if (currentZone === 'CYBER') {
-        if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
-        const layers = [{img: imgCache.buildings[2], s: 0.5, op: 0.2, h: 550}, {img: imgCache.buildings[1], s: 1.5, op: 0.4, h: 450}, {img: imgCache.buildings[0], s: 3, op: 0.6, h: 350}];
-        layers.forEach(l => {
-            if (l.img.complete) {
-                ctx.save(); let x = -(frame * l.s) % canvas.width;
-                ctx.globalAlpha = l.op; ctx.filter = `hue-rotate(${dimensionHue}deg)`;
-                ctx.drawImage(l.img, x, floorY - l.h, canvas.width, l.h);
-                ctx.drawImage(l.img, x + canvas.width, floorY - l.h, canvas.width, l.h);
-                ctx.restore();
-            }
-        });
-        ctx.globalCompositeOperation = "screen"; drawMatrix(); ctx.globalCompositeOperation = "source-over";
-    } else {
-        if (imgCache.snackBG.complete) {
-            snackX -= (gameSpeed * 0.5);
-            if (snackX <= -canvas.width) snackX = 0;
-            ctx.drawImage(imgCache.snackBG, snackX, 0, canvas.width, canvas.height);
-            ctx.drawImage(imgCache.snackBG, snackX + canvas.width, 0, canvas.width, canvas.height);
-        }
-        ctx.fillStyle = "rgba(255, 255, 200, 0.15)"; ctx.fillRect(0,0, canvas.width, canvas.height);
-    }
-
-    backgroundProps.forEach((p, i) => {
-        p.x -= 4; if (imgCache.loriBlur.complete) {
-            ctx.save(); ctx.globalAlpha = 0.5; ctx.drawImage(imgCache.loriBlur, p.x, p.y, p.w, p.h); ctx.restore();
-        }
-        if (!p.passed && p.x < 150) { p.passed = true; shake = 25; dimensionHue += 90; }
-        if (p.x < -350) backgroundProps.splice(i, 1);
-    });
-
-    if (imgCache.floor.complete) {
-        let fX = -(frame * gameSpeed) % 100;
-        for (let i = -1; i < (canvas.width / 100) + 2; i++) {
-            ctx.drawImage(imgCache.floor, (i * 100) + fX, floorY, 100, GROUND_Y_OFFSET);
-        }
-    }
 }
 
 function loop() {
-    ctx.save(); if (shake > 0) { ctx.translate(Math.random()*shake, Math.random()*shake); shake *= 0.85; }
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    draw();
+    ctx.save();
+    if (shake > 0) { ctx.translate(Math.random()*shake, Math.random()*shake); shake *= 0.85; }
+    
+    // GLITCH DISTORTION
+    if (glitchTimer > 0) {
+        ctx.translate(Math.sin(frame) * 10, 0);
+        ctx.filter = `hue-rotate(${frame * 10}deg) saturate(3)`;
+        glitchTimer--;
+    }
 
-    particles.forEach((p, index) => {
-        p.update(); p.draw(); if (p.life <= 0) particles.splice(index, 1);
-    });
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // DRAW BACKGROUNDS
+    if (currentZone === 'CYBER') {
+        if (imgCache.bg.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
+    } else {
+        if (imgCache.snackBG.complete) {
+            const bgWidth = imgCache.snackBG.width;
+            const scale = canvas.height / imgCache.snackBG.height;
+            const drawWidth = bgWidth * scale;
+            snackX -= (gameSpeed * 0.5 * timeScale);
+            if (snackX <= -drawWidth) snackX = 0;
+            ctx.drawImage(imgCache.snackBG, snackX, 0, drawWidth, canvas.height);
+            ctx.drawImage(imgCache.snackBG, snackX + drawWidth, 0, drawWidth, canvas.height);
+        }
+    }
 
     if (gameState === 'PLAYING') {
         frame++; spawn();
-        jumpHeight -= yVelocity; yVelocity += gravity;
-        if (jumpHeight <= 0) { jumpHeight = 0; yVelocity = 0; }
-
-        const aFrame = Math.floor(frame / 6) % 4;
-        if (imgCache.azul[aFrame].complete) {
-            ctx.drawImage(imgCache.azul[aFrame], 100, floorY - 110 - jumpHeight, 90, 115);
+        
+        // MOVEMENT WITH COYOTE TIME
+        jumpHeight -= yVelocity * timeScale;
+        yVelocity += gravity * timeScale;
+        
+        if (jumpHeight <= 0) {
+            jumpHeight = 0; yVelocity = 0;
+            coyoteFrames = 5; // Give 5 frames of "ghost floor" for jumping
+        } else {
+            coyoteFrames--;
         }
 
+        // AZUL RENDER
+        const aFrame = Math.floor(frame / 6) % 4;
+        ctx.drawImage(imgCache.azul[aFrame], 100, floorY - 110 - jumpHeight, 90, 115);
+
+        // OBJECTS
         gameObjects.forEach((obj, i) => {
-            obj.x -= gameSpeed;
-            if (obj.x < 160 && obj.x > 80 && jumpHeight < (obj.type === 'tech' ? 95 : 65)) {
+            obj.x -= gameSpeed * timeScale;
+            
+            // SLOW-MO ON PORTAL ENTRY
+            if (obj.type === 'portal' && obj.x < 400 && obj.x > 160) {
+                timeScale = 0.4; // Enter slow-mo
+            }
+
+            const hitboxHeight = obj.type === 'tech' ? 70 : 60;
+            if (obj.x < 160 && obj.x > 80 && jumpHeight < hitboxHeight) {
                 if (obj.type === 'portal') {
-                    toggleZone(); gameObjects.splice(i, 1);
-                } else if (obj.type === 'tech') {
-                    score += 100;
-                    const pCol = (currentZone === 'CYBER') ? `hsla(${dimensionHue + 120}, 100%, 50%, 1)` : "#ff0";
-                    for(let j=0; j<12; j++) particles.push(new Particle(obj.x + 40, obj.y + 40, pCol));
-                    particles.push(new Particle(obj.x, obj.y, "#fff", "+100"));
-                    shake = 8; gameObjects.splice(i, 1);
-                } else if (obj.type === 'obstacle' && currentZone === 'CYBER') {
-                    triggerBSOD();
+                    toggleZone();
+                    portalActive = false;
+                    gameObjects.splice(i, 1);
+                    return;
+                }
+                if (obj.type === 'tech') {
+                    score += (100 * combo);
+                    combo++;
+                    shake = 8;
+                    gameObjects.splice(i, 1);
+                } else if (currentZone === 'CYBER') {
+                    gameState = 'GAMEOVER'; 
+                    document.getElementById('bsod').style.display = 'block';
+                    setTimeout(() => { document.getElementById('bsod').style.display = 'none'; }, 2000);
                 }
             }
-            if (obj.img && obj.img.complete) {
-                ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+
+            if (obj.x < -150) {
+                if (obj.type === 'portal') portalActive = false;
+                if (obj.type === 'obstacle') combo = 1; // Reset combo if you dodge an obstacle
+                gameObjects.splice(i, 1);
             }
-            if (obj.x < -150) gameObjects.splice(i, 1);
+            if (obj.img) ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
         });
+
+        // UI UPDATES
+        const scoreEl = document.getElementById('score');
+        scoreEl.innerText = `DIMENSION: ${score}`;
+        document.getElementById('multiplier').innerText = `COMBO: X${combo}`;
         
-        document.getElementById('score').innerText = `DIMENSION: ${score}`;
-        document.getElementById('highScore').innerText = `BEST: ${highScore}`;
+        if (score > highScore && highScore > 0) {
+            scoreEl.classList.add('new-record-anim');
+        }
     } else {
-        ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,canvas.width, canvas.height);
-        ctx.fillStyle = "#0ff"; ctx.textAlign = "center"; ctx.font = "18px Courier";
-        ctx.fillText(gameState === 'START' ? "TAP TO INJECT CODE" : "REBOOTING...", canvas.width/2, canvas.height/2);
+        ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = "#0ff"; ctx.textAlign = "center"; ctx.fillText("TAP TO START", canvas.width/2, canvas.height/2);
     }
-    ctx.restore(); requestAnimationFrame(loop);
+    
+    ctx.restore();
+    requestAnimationFrame(loop);
 }
 
 window.addEventListener('touchstart', (e) => {
     if (gameState !== 'PLAYING') {
-        gameState = 'PLAYING'; 
-        score = 0; 
-        frame = 0; 
-        lastPortalMilestone = 0; 
-        currentZone = 'CYBER'; 
-        gameSpeed = 7; 
-        dimensionHue = 0; 
-        bgMusic.play().catch(()=>{});
-    } else if (jumpHeight === 0) yVelocity = -22;
+        gameState = 'PLAYING'; score = 0; combo = 1; lastPortalMilestone = 0; portalActive = false; timeScale = 1.0;
+    } else if (jumpHeight === 0 || coyoteFrames > 0) { 
+        yVelocity = -22;
+        coyoteFrames = 0; // Use up the coyote jump
+    }
     e.preventDefault();
 }, {passive: false});
 
