@@ -9,10 +9,11 @@ body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
 #gameCanvas { display:block; width:100vw; height:100vh; background:#000; }
 .ui-layer { position:absolute; top:env(safe-area-inset-top); left:20px; color:#0ff; font-family:'Courier New', monospace; z-index:100; pointer-events:none; text-shadow:0 0 8px #0ff; }
 #score { font-size:24px; font-weight:bold; }
+#status { font-size:18px; margin-top:5px; }
 .controls { position:absolute; top:env(safe-area-inset-top); right:20px; display:flex; gap:15px; z-index:150; }
 .btn { font-size:24px; background:rgba(0,255,255,0.15); border:1.5px solid #0ff; border-radius:8px; padding:8px; color:#0ff; cursor:pointer; backdrop-filter: blur(5px); display:flex; align-items:center; justify-content:center; }
 #bsod { position:fixed; top:0; left:0; width:100%; height:100%; background:#0000aa; color:#fff; font-family:'Courier New'; display:none; z-index:200; padding:50px; box-sizing:border-box; }
-#flash { position:fixed; top:0; left:0; width:100%; height:100%; background:#fff; opacity:0; z-index:250; pointer-events:none; transition:opacity 0.1s; }
+#flash { position:fixed; top:0; left:0; width:100%; height:100%; background:#fff; opacity:0; z-index:250; pointer-events:none; transition:opacity 0.15s; }
 </style>
 </head>
 <body>
@@ -32,62 +33,58 @@ body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-
 const bgMusic = new Audio('password-infinity.mp3');
-bgMusic.loop = true;
-const beastModeSfx = new Audio('beast_mode.mp3');
+const beastSfx = new Audio('beast_mode.mp3');
+bgMusic.loop=true;
 
-let isMuted = false, isPaused = false, gameState='START';
-let score=0, frame=0, gameSpeed=7, jumpHeight=0, yVelocity=0, shake=0;
-let currentZone='CYBER', earthquakeActive=false, beastModePlayed=false;
+let isMuted=false, isPaused=false, gameState='START';
+let score=0, frame=0, gameSpeed=7, dimensionHue=0;
+let jumpHeight=0, yVelocity=0, shake=0, dimensionLevel=1;
+let currentZone='CYBER', earthquakeActive=false, beastPlayed=false;
 const gravity=1.2, GROUND_Y_OFFSET=100;
 let floorY, portalActive=false;
 
-const ASSETS = {
-    bg:'gg-bg.png',
-    snackBg:'hot-food-c-store-wp.JPG',
-    floor:'floor.png',
-    azul:['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
-    buildings:['building-a.png','building-b.png','building-c.png'],
-    loriBlur:'lori-blur.png',
-    obstacles:['old-pc.png'],
-    portal:'snack-portal.png'
+const ASSETS={
+bg:'gg-bg.png', snackBg:'hot-food-c-store-wp.JPG', floor:'floor.png',
+azul:['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
+buildings:['building-a.png','building-b.png','building-c.png'],
+loriBlur:'lori-blur.png',
+obstacles:['old-pc.png'], portal:'snack-portal.png'
 };
-const LOOT = ['power-supply.png','2tb.png','motherboard.png','ssd.png','graphics-card.png','taco.png','soda.png','pink-donut.png'];
-const SNACK_LOOT = ['bread-slice.png','chips.png','hotdog.png','pink-donut.png','roast-chicken.png','soda.png','taco.png','mochkil-burger.png','mochkil_puffs_orange.png','azulo_blueberry_vanilla.jpg'];
-
+const LOOT=['power-supply.png','2tb.png','motherboard.png','ssd.png','graphics-card.png','taco.png','soda.png','pink-donut.png'];
+const SNACK_LOOT=['bread-slice.png','chips.png','hotdog.png','pink-donut.png','roast-chicken.png','soda.png','taco.png','mochkil-burger.png','mochkil_puffs_orange.png','azulo_blueberry_vanilla.jpg'];
 const imgCache={loot:[]};
-let gameObjects=[], drops=[];
 
-// Load images
+let gameObjects=[], drops=[], particles=[], popups=[], bonusCount=0;
+
 function load(){
-    Object.keys(ASSETS).forEach(k=>{
-        if(Array.isArray(ASSETS[k])) imgCache[k] = ASSETS[k].map(src=>{let i=new Image(); i.src=src; return i;});
-        else { let i=new Image(); i.src=ASSETS[k]; imgCache[k]=i; }
+    Object.keys(ASSETS).forEach(key=>{
+        if(Array.isArray(ASSETS[key])) imgCache[key]=ASSETS[key].map(src=>{let i=new Image(); i.src=src; return i;});
+        else { let i=new Image(); imgCache[key]=new Image(); imgCache[key].src=ASSETS[key]; }
     });
-    LOOT.forEach(src=>{let i=new Image(); i.src=src; imgCache.loot.push(i);});
-    SNACK_LOOT.forEach(src=>{let i=new Image(); i.src=src; imgCache.loot.push(i);});
+    LOOT.concat(SNACK_LOOT).forEach(src=>{ let i=new Image(); i.src=src; imgCache.loot.push(i); });
 }
 
-// Resize & initialize matrix
 function resize(){
     canvas.width=window.innerWidth; canvas.height=window.innerHeight;
     floorY=canvas.height-GROUND_Y_OFFSET;
-    drops = Array(Math.floor(canvas.width/20)).fill(1);
+    drops=Array(Math.floor(canvas.width/20)).fill(1);
 }
 
 function flash(){
-    const f=document.getElementById('flash'); f.style.opacity=1;
-    setTimeout(()=>f.style.opacity=0,150);
+    const f=document.getElementById('flash');
+    f.style.opacity=1; setTimeout(()=>f.style.opacity=0,150);
 }
 
 function spawn(){
+    // Portal every 5000
     if(score>0 && score%5000===0 && !portalActive){
         portalActive=true;
         gameObjects.push({x:canvas.width+100,y:floorY-140,w:120,h:140,type:'portal',img:imgCache.portal});
+        return;
     }
+    const lootPool=currentZone==='SNACK'?SNACK_LOOT:LOOT;
     if(frame%80===0){
-        const lootPool = currentZone==='SNACK'?SNACK_LOOT:LOOT;
         const isLoot=Math.random()>0.4;
         gameObjects.push({
             x:canvas.width+100, y:floorY-85, w:80, h:80,
@@ -97,102 +94,81 @@ function spawn(){
     }
 }
 
-// Draw background
+function drawParticles(){ctx.font="bold 18px monospace"; particles.forEach((p,i)=>{
+    ctx.fillStyle=p.color; ctx.globalAlpha=p.life/50;
+    ctx.fillText(p.char,p.x,p.y); p.x+=p.vx; p.y+=p.vy; p.life--; if(p.life<=0) particles.splice(i,1);
+}); ctx.globalAlpha=1;}
+function drawPopups(){ctx.textAlign='center'; ctx.font="bold 22px monospace"; popups.forEach((p,i)=>{
+    ctx.fillStyle=`rgba(0,255,255,${p.alpha})`; ctx.fillText(p.text,p.x,p.y); p.y+=p.vy; p.alpha-=0.02; if(p.alpha<=0) popups.splice(i,1);
+});}
+
+function spawnParticles(x,y){for(let i=0;i<8;i++){particles.push({x,y,vx:(Math.random()-0.5)*6,vy:(Math.random()-2)*2,life:50+Math.random()*20,char:Math.random()>0.5?'1':'0',color:`hsl(${Math.random()*360},100%,60%)`});}}
+function spawnPopup(text,x,y){popups.push({text,x,y,alpha:1,vy:-1.2});}
+
 function drawBackground(){
     if(currentZone==='CYBER'){
         if(imgCache.bg.complete) ctx.drawImage(imgCache.bg,0,0,canvas.width,canvas.height);
         if(imgCache.loriBlur.complete){
-            ctx.save(); ctx.globalAlpha=0.4;
-            let lX=-(frame*0.5)%canvas.width;
+            ctx.save(); ctx.globalAlpha=0.4; let lX=-(frame*0.5)%canvas.width;
             ctx.drawImage(imgCache.loriBlur,lX,0,canvas.width,canvas.height);
             ctx.drawImage(imgCache.loriBlur,lX+canvas.width,0,canvas.width,canvas.height);
             ctx.restore();
         }
-        // Buildings
-        imgCache.buildings.forEach((b,i)=>{
-            if(b.complete){
-                ctx.save();
-                let x=-(frame*(1+i*0.5))%canvas.width;
-                ctx.globalAlpha=0.3+0.2*i;
-                ctx.drawImage(b,x,floorY-350-(i*50),canvas.width,350);
-                ctx.drawImage(b,x+canvas.width,floorY-350-(i*50),canvas.width,350);
-                ctx.restore();
-            }
+        const layers=[{img:imgCache.buildings[2],s:0.8,op:0.2,h:550},{img:imgCache.buildings[1],s:1.8,op:0.4,h:450},{img:imgCache.buildings[0],s:3.5,op:0.6,h:350}];
+        layers.forEach(l=>{
+            if(l.img.complete){ctx.save(); let x=-(frame*l.s)%canvas.width; ctx.globalAlpha=l.op; ctx.filter=`hue-rotate(${dimensionHue}deg)`; ctx.drawImage(l.img,x,floorY-l.h,canvas.width,l.h); ctx.drawImage(l.img,x+canvas.width,floorY-l.h,canvas.width,l.h); ctx.restore();}
         });
         // Matrix rain
-        ctx.save(); ctx.fillStyle=`hsl(${(frame*2)%360},100%,60%)`; ctx.font="bold 18px monospace";
-        drops.forEach((y,i)=>{
-            ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20);
-            if(y*20>canvas.height && Math.random()>0.975) drops[i]=0;
-            drops[i]++;
-        });
+        ctx.save(); ctx.fillStyle=`hsl(${dimensionHue},100%,60%)`;
+        drops.forEach((y,i)=>{ctx.fillText(Math.random()>0.5?"1":"0",i*20,y*20); if(y*20>canvas.height && Math.random()>0.975) drops[i]=0; drops[i]++;});
         ctx.restore();
     } else {
         if(imgCache.snackBg.complete){
-            let sX = -(frame*3)%canvas.width;
-            ctx.drawImage(imgCache.snackBg,sX,0,canvas.width,canvas.height);
-            ctx.drawImage(imgCache.snackBg,sX+canvas.width,0,canvas.width,canvas.height);
+            let x=-(frame*3)%canvas.width;
+            ctx.drawImage(imgCache.snackBg,x,0,canvas.width,canvas.height);
+            ctx.drawImage(imgCache.snackBg,x+canvas.width,0,canvas.width,canvas.height);
         }
     }
-    // Solid Ground
     ctx.fillStyle="#222"; ctx.fillRect(0,floorY,canvas.width,GROUND_Y_OFFSET);
-    if(imgCache.floor.complete){
-        let fX=-(frame*gameSpeed)%100;
-        for(let i=-1;i<(canvas.width/100)+2;i++) ctx.drawImage(imgCache.floor,(i*100)+fX,floorY,100,GROUND_Y_OFFSET);
-    }
+    if(imgCache.floor.complete){let fX=-(frame*gameSpeed)%100; for(let i=-1;i<(canvas.width/100)+2;i++) ctx.drawImage(imgCache.floor,(i*100)+fX,floorY,100,GROUND_Y_OFFSET);}
 }
 
-// Main loop
-let bonusCount=0;
 function loop(){
     if(isPaused){requestAnimationFrame(loop); return;}
     ctx.save();
-
-    // Shaking logic
-    if(earthquakeActive){
-        ctx.translate((Math.random()-0.5)*15,(Math.random()-0.5)*15); // constant shake
-    } else if(shake>0){ 
-        ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
-        shake*=0.85;
-    }
-
+    if(shake>0){ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake); shake*=0.85;}
     ctx.clearRect(0,0,canvas.width,canvas.height);
     drawBackground();
 
     if(gameState==='PLAYING'){
         frame++; spawn();
         jumpHeight-=yVelocity; yVelocity+=gravity;
-        let landed=false;
-        if(jumpHeight<=0){jumpHeight=0; yVelocity=0; landed=true;}
-
-        // subtle shake on landing if not earthquake
-        if(landed && !earthquakeActive) shake=8;
-
+        let landed=false; if(jumpHeight<=0){landed=true;jumpHeight=0;yVelocity=0;}
+        if(landed && earthquakeActive){shake=10;}
         const aFrame=Math.floor(frame/6)%4;
         ctx.drawImage(imgCache.azul[aFrame],100,floorY-110-jumpHeight,90,115);
 
         gameObjects.forEach((obj,i)=>{
             obj.x-=gameSpeed;
             if(obj.x<160 && obj.x>80 && jumpHeight<70){
-                if(obj.type==='portal'){
-                    flash(); bonusCount=0;
-                    portalActive=false; gameObjects=[];
-                    if(currentZone==='CYBER'){
-                        currentZone='SNACK';
-                    } else if(currentZone==='SNACK'){
-                        currentZone='CYBER';
-                        earthquakeActive=true;
-                        if(!beastModePlayed){beastModeSfx.play(); beastModePlayed=true;}
-                    }
-                } else if(obj.type==='tech'){
-                    let points=100*(++bonusCount<=10?bonusCount:1);
-                    score+=points; if(bonusCount>=10) bonusCount=0;
+                if(obj.type==='tech'){
+                    let points=100*(++bonusCount<=10?bonusCount:1); score+=points;
+                    spawnParticles(obj.x+obj.w/2,obj.y+obj.h/2);
+                    spawnPopup('+'+points,obj.x+obj.w/2,obj.y);
+                    if(bonusCount>=10) bonusCount=0;
                     gameObjects.splice(i,1);
-                } else { gameState='START'; }
+                } else if(obj.type==='portal'){
+                    flash(); dimensionLevel++;
+                    if(dimensionLevel===2){currentZone='SNACK'; bonusCount=0;}
+                    else if(dimensionLevel===3){currentZone='CYBER'; earthquakeActive=true; if(!beastPlayed){beastSfx.play(); beastPlayed=true;}}
+                    else{currentZone='CYBER'; earthquakeActive=false; dimensionLevel=1; beastPlayed=false;}
+                    portalActive=false; gameObjects=[];
+                } else{gameState='START';}
             }
             if(obj.img) ctx.drawImage(obj.img,obj.x,obj.y,obj.w,obj.h);
+            if(obj.x<-100) gameObjects.splice(i,1);
         });
-
+        drawParticles(); drawPopups();
         document.getElementById('score').innerText=`DIMENSION: ${score}`;
         document.getElementById('status').innerText=`ZONE: ${currentZone} ${earthquakeActive?'(BEAST MODE)':''}`;
     } else {
@@ -200,20 +176,18 @@ function loop(){
         ctx.fillStyle="#0ff"; ctx.textAlign="center"; ctx.font="24px Courier";
         ctx.fillText("TAP TO INJECT CODE",canvas.width/2,canvas.height/2);
     }
-
-    ctx.restore();
-    requestAnimationFrame(loop);
+    ctx.restore(); requestAnimationFrame(loop);
 }
 
-// Controls
-document.getElementById('muteBtn').addEventListener('touchstart',e=>{e.stopPropagation();isMuted=!isMuted; bgMusic.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊';},{passive:false});
-document.getElementById('pauseBtn').addEventListener('touchstart',e=>{e.stopPropagation();isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff';},{passive:false});
-window.addEventListener('touchstart',e=>{
+window.addEventListener('touchstart', e=>{
     if(e.target.closest('.btn')) return;
-    if(gameState!=='PLAYING'){gameState='PLAYING'; score=0; frame=0; bonusCount=0; portalActive=false; earthquakeActive=false; beastModePlayed=false; gameObjects=[]; bgMusic.play();}
+    if(gameState!=='PLAYING'){gameState='PLAYING'; score=0; frame=0; bonusCount=0; portalActive=false; currentZone='CYBER'; earthquakeActive=false; bgMusic.play();}
     else if(jumpHeight===0) yVelocity=-22;
     e.preventDefault();
 },{passive:false});
+
+document.getElementById('muteBtn').addEventListener('touchstart', e=>{isMuted=!isMuted; bgMusic.muted=isMuted; beastSfx.muted=isMuted; document.getElementById('muteBtn').innerText=isMuted?'🔇':'🔊'; e.stopPropagation();},{passive:false});
+document.getElementById('pauseBtn').addEventListener('touchstart', e=>{isPaused=!isPaused; document.getElementById('pauseBtn').style.borderColor=isPaused?'#ff0':'#0ff'; e.stopPropagation();},{passive:false});
 
 load(); resize(); window.addEventListener('resize',resize); loop();
 </script>
