@@ -289,7 +289,7 @@ function spawn() {
       obsImg = imgCache.EARTHQUAKE_OBSTACLES[Math.floor(Math.random() * imgCache.EARTHQUAKE_OBSTACLES.length)];
     }
     if (obsImg) {
-      gameObjects.push({ x: canvas.width + 100, y: floorY - 90, w: 80, h: 90, type: 'obstacle', img: obsImg });
+      gameObjects.push({ x: canvas.width + 100, y: floorY - 70, w: 80, h: 70, type: 'obstacle', img: obsImg });
       return; 
     }
   }
@@ -428,7 +428,7 @@ function loop() {
       const obj = gameObjects[i]; 
       obj.x -= gameSpeed;
 
-      const player = { x: 100, y: floorY - 110 - jumpHeight, width: 70, height: 100 };
+      const player = { x: 100, y: floorY - 110 - jumpHeight, width: 50, height: 100 };
       const padding = 12; 
       const objHitbox = {
         x: obj.x + padding, y: obj.y + padding,
@@ -523,7 +523,7 @@ document.getElementById('easyModeBtn').addEventListener('touchstart', e => {
 window.addEventListener('touchstart', e => {
   if (gameState === 'PLAYING' && jumpHeight === 0) {
     if (!e.target.closest('.btn')) {
-      yVelocity = -22;
+      yVelocity = -27;
       e.preventDefault();
     }
   }
