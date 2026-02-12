@@ -114,6 +114,7 @@ let floorY;
 //  ASSETS & LOOT TABLES
 // ──────────────────────────────────────────────────────────────
 
+// Add the 'pc' key here so it's managed like everything else
 const ASSETS = {
   bg:             'gg-bg.png',
   snackBg:        'hot-food-c-store-wp.JPG',
@@ -121,6 +122,7 @@ const ASSETS = {
   floor:          'floor.png',
   loriBlur:       'lori-blur.png',
   portal:         'snack-portal.png',
+  pc:             'old-pc.png',          // ← Added!
   azul:           ['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
   buildings:      ['building-a.png','building-b.png','building-c.png'],
 };
@@ -130,63 +132,46 @@ const SNACK_LOOT       = ['azulo_blueberry_vanilla.jpg','bread-slice.png','chips
 const EARTHQUAKE_LOOT  = ['book.png','scrolls.png','pottery.png','pottery2.png','pottery3.png','pottery4.png'];
 const EARTHQUAKE_OBSTACLES = ['herc-bust.png','rubble.png'];
 
+// This updated cache structure keeps everything organized
 const imgCache = {
-  CYBER_LOOT:       [],
-  SNACK_LOOT:       [],
-  EARTHQUAKE_LOOT:  [],
-  EARTHQUAKE_OBSTACLES: [],
-  azul:             [],
-  buildings:        [],
+  bg: null,
+  snackBg: null,
+  earthquakeBg: null,
+  floor: null,
+  loriBlur: null,
+  portal: null,
+  pc: null,
+  azul: [],
+  buildings: [],
+  CYBER_LOOT: [],
+  SNACK_LOOT: [],
+  EARTHQUAKE_LOOT: [],
+  EARTHQUAKE_OBSTACLES: []
 };
-
-// ──────────────────────────────────────────────────────────────
-//  PARTICLES
-// ──────────────────────────────────────────────────────────────
-
-let particles = [];
-class Particle {
-  constructor(x, y, color, text = null, sizeMod = 1) {
-    this.x = x; this.y = y;
-    this.char = text || (Math.random() > 0.5 ? "0" : "1");
-    this.size = (text ? 28 : Math.random() * 10 + 12) * sizeMod;
-    this.speedX = (Math.random() - 0.5) * 10;
-    this.speedY = (Math.random() - 0.5) * 10;
-    this.color = color; this.life = 1.0;
-  }
-  update() { this.x += this.speedX; this.y += this.speedY; this.life -= 0.02; }
-  draw() {
-    ctx.save();
-    ctx.fillStyle = this.color;
-    ctx.globalAlpha = this.life;
-    ctx.font = `bold ${this.size}px monospace`;
-    ctx.fillText(this.char, this.x, this.y);
-    ctx.restore();
-  }
-}
 
 // ──────────────────────────────────────────────────────────────
 //  LOAD ASSETS
 // ──────────────────────────────────────────────────────────────
 
 function loadAssets() {
-  // Single images
-  ['bg','snackBg','earthquakeBg','floor','loriBlur','portal'].forEach(key => {
+  // 1. Load Single Images
+  ['bg','snackBg','earthquakeBg','floor','loriBlur','portal','pc'].forEach(key => {
     const img = new Image();
     img.src = ASSETS[key];
-    imgCache[key] = img;
+    imgCache[key] = img; 
   });
 
-  // Arrays
+  // 2. Load Arrays (Azul & Buildings)
   ASSETS.azul.forEach(src => {
     const img = new Image(); img.src = src;
     imgCache.azul.push(img);
   });
-
   ASSETS.buildings.forEach(src => {
     const img = new Image(); img.src = src;
     imgCache.buildings.push(img);
   });
 
+  // 3. Load Loot Tables
   CYBER_LOOT.forEach(src => { const i = new Image(); i.src = src; imgCache.CYBER_LOOT.push(i); });
   SNACK_LOOT.forEach(src => { const i = new Image(); i.src = src; imgCache.SNACK_LOOT.push(i); });
   EARTHQUAKE_LOOT.forEach(src => { const i = new Image(); i.src = src; imgCache.EARTHQUAKE_LOOT.push(i); });
@@ -282,64 +267,70 @@ function flashScreen() {
 // ──────────────────────────────────────────────────────────────
 
 let gameObjects = [];
+let particles = [];
+
+class Particle {
+  constructor(x, y, color, text = null, sizeMod = 1) {
+    this.x = x; this.y = y;
+    this.char = text || (Math.random() > 0.5 ? "0" : "1");
+    this.size = (text ? 28 : Math.random() * 10 + 12) * sizeMod;
+    this.speedX = (Math.random() - 0.5) * 10;
+    this.speedY = (Math.random() - 0.5) * 10;
+    this.color = color; this.life = 1.0;
+  }
+  update() { this.x += this.speedX; this.y += this.speedY; this.life -= 0.02; }
+  draw() {
+    ctx.save();
+    ctx.fillStyle = this.color;
+    ctx.globalAlpha = this.life;
+    ctx.font = `bold ${this.size}px monospace`;
+    ctx.fillText(this.char, this.x, this.y);
+    ctx.restore();
+  }
+}
 
 function spawn() {
-  // Portal every 5000 points
+  // PORTAL LOGIC (Every 5000 pts)
   if (score >= 5000 && score - lastPortalScore >= 5000 && !portalActive) {
     portalActive = true;
     lastPortalScore = score;
     gameObjects.push({
       x: canvas.width + 100,
       y: floorY - 140,
-      w: 120,
-      h: 140,
+      w: 120, h: 140,
       type: 'portal',
       img: imgCache.portal
     });
     return;
   }
 
-  let lootArr;
-  if      (currentZone === 'CYBER')     lootArr = imgCache.CYBER_LOOT;
-  else if (currentZone === 'SNACK')     lootArr = imgCache.SNACK_LOOT;
-  else if (currentZone === 'EARTHQUAKE') lootArr = imgCache.EARTHQUAKE_LOOT;
+  // LOOT SPAWN
+  let lootArr = (currentZone === 'CYBER') ? imgCache.CYBER_LOOT : 
+                (currentZone === 'SNACK') ? imgCache.SNACK_LOOT : imgCache.EARTHQUAKE_LOOT;
 
-  // Loot spawn
-  if (frame % 80 === 0 && lootArr?.length > 0) {
+  if (frame % 80 === 0 && lootArr.length > 0) {
     gameObjects.push({
-      x: canvas.width + 100,
-      y: floorY - 85,
-      w: 80,
-      h: 80,
-      type: 'tech',
+      x: canvas.width + 100, y: floorY - 85,
+      w: 80, h: 80, type: 'tech',
       img: lootArr[Math.floor(Math.random() * lootArr.length)]
     });
   }
 
-  // Obstacles
-  if (currentZone === 'CYBER' && frame % 180 === 0) {
-    const img = new Image();
-    img.src = 'old-pc.png';
-    gameObjects.push({
-      x: canvas.width + 100,
-      y: floorY - 90,
-      w: 80,
-      h: 80,
-      type: 'obstacle',
-      img
-    });
-  }
+  // OBSTACLE SPAWN (Fixed for performance)
+  if (frame % 180 === 0) {
+    let obsImg = null;
+    
+    if (currentZone === 'CYBER') {
+      obsImg = imgCache.pc; // Using the cached PC image
+    } else if (currentZone === 'EARTHQUAKE') {
+      obsImg = imgCache.EARTHQUAKE_OBSTACLES[Math.floor(Math.random() * imgCache.EARTHQUAKE_OBSTACLES.length)];
+    }
 
-  if (currentZone === 'EARTHQUAKE' && frame % 200 === 0) {
-    const obsArr = imgCache.EARTHQUAKE_OBSTACLES;
-    if (obsArr?.length > 0) {
+    if (obsImg) {
       gameObjects.push({
-        x: canvas.width + 100,
-        y: floorY - 90,
-        w: 80,
-        h: 80,
-        type: 'obstacle',
-        img: obsArr[Math.floor(Math.random() * obsArr.length)]
+        x: canvas.width + 100, y: floorY - 90,
+        w: 80, h: 80, type: 'obstacle',
+        img: obsImg
       });
     }
   }
