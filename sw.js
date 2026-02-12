@@ -1,4 +1,4 @@
-const CACHE_NAME = 'max-reality-v5'; // bump version to force re-cache
+const CACHE_NAME = 'max-reality-v6'; // bump version to force re-cache
 
 const ASSETS = [
   'Azul-doll.png',
@@ -26,6 +26,7 @@ const ASSETS = [
   'sw.js',
   'rubble.png',
   'herc-bust.png',
+  'worse.png',
   '2tb.png',
   'card.png',
   'circuitpython.png',
