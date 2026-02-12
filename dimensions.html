@@ -45,11 +45,37 @@
       pointer-events: none; transition: opacity 0.1s;
     }
 
-    #startOverlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.7); color: #0ff;
-      z-index: 300; display: flex; align-items: center; justify-content: center;
-      font-size: 48px; text-shadow: 0 0 15px #0ff; pointer-events: none;
-    }
+#startOverlay {
+  position: fixed; 
+  inset: 0; 
+  z-index: 300; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  color: #0ff;
+  font-size: 48px; 
+  text-shadow: 0 0 15px #0ff;
+  pointer-events: auto !important;
+  background: rgba(0,0,0,0.85);
+}
+
+/* These need to be outside the startOverlay brackets */
+#hardModeBtn { 
+  text-shadow: 0 0 10px #f0f; 
+  animation: pulse 1.5s infinite; 
+}
+
+#easyModeBtn { 
+  text-shadow: 0 0 10px #0ff; 
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+
   </style>
 </head>
 <body>
@@ -62,7 +88,17 @@
 
 <div id="flash"></div>
 
-<div id="startOverlay">TAP TO START</div>
+<div id="startOverlay">
+  <div style="text-align: center;">
+    <div style="font-size: 32px; margin-bottom: 30px;">CHOOSE REALITY</div>
+    <div style="display: flex; gap: 20px; justify-content: center;">
+      <div id="hardModeBtn" class="btn" style="font-size: 20px; padding: 20px; border-color: #f0f; color: #f0f; pointer-events: auto;">CHAOS</div>
+      
+      <div id="easyModeBtn" class="btn" style="font-size: 20px; padding: 20px; border-color: #0ff; color: #0ff; pointer-events: auto;">COMFORT</div>
+    </div>
+  </div>
+</div>
+
 
 <div class="controls">
   <a href="https://maximumreality.xyz" class="btn">🏠</a>
@@ -575,20 +611,35 @@ for (let i = gameObjects.length - 1; i >= 0; i--) {
 //  INPUT
 // ──────────────────────────────────────────────────────────────
 
-window.addEventListener('touchstart', e => {
-  if (e.target.closest('.btn') || e.target.closest('#bsod')) return;
-
-  if (gameState === 'START') {
-    document.getElementById('startOverlay').style.display = 'none';
-    resetGame();
-    gameState = 'PLAYING';
-    bgMusic.play().catch(() => {}); // autoplay may be blocked
-  }
-  else if (gameState === 'PLAYING' && jumpHeight === 0) {
-    yVelocity = -22;
-  }
-
+// Remove the generic touchstart listener and use these specific ones
+document.getElementById('hardModeBtn').addEventListener('touchstart', e => {
   e.preventDefault();
+  e.stopPropagation();
+  
+  // START CHAOS MODE (Current Page)
+  document.getElementById('startOverlay').style.display = 'none';
+  resetGame();
+  gameState = 'PLAYING';
+  bgMusic.play().catch(() => {});
+}, {passive: false});
+
+document.getElementById('easyModeBtn').addEventListener('touchstart', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  // REDIRECT TO COMFORT MODE PAGE
+  // Replace 'comfort.html' with the actual filename of your second page
+  window.location.href = 'comfort.html'; 
+}, {passive: false});
+
+// Keep the jump logic separate so it only works while playing
+window.addEventListener('touchstart', e => {
+  if (gameState === 'PLAYING' && jumpHeight === 0) {
+    if (!e.target.closest('.btn')) {
+      yVelocity = -22;
+      e.preventDefault();
+    }
+  }
 }, {passive: false});
 
 // Start loop
