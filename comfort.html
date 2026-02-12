@@ -426,10 +426,10 @@ function loop() {
     if (imgCache.azul[animFrame]?.complete) {
       ctx.drawImage(imgCache.azul[animFrame], 100, floorY - 165 - jumpHeight, 110, 170);
     }
-
-    // ─── OBJECTS LOOP ───
-    for (let i = gameObjects.length - 1; i >= 0; i--) {
-      const obj = gameObjects[i]; 
+ 
+   for (let i = gameObjects.length - 1; i >= 0; i--) {
+      const obj = gameObjects[i];    // ─── OBJECTS LOOP ───
+    
       obj.x -= gameSpeed;
 
       const player = {
