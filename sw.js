@@ -1,4 +1,4 @@
-const CACHE_NAME = 'max-reality-v2';
+const CACHE_NAME = 'max-reality-v3';
 
 const ASSETS = [
   'index.html',
@@ -65,6 +65,19 @@ self.addEventListener('fetch', (event) => {
       return response || fetch(event.request).catch((err) => {
         console.log("Missing:", event.request.url);
       });
+    })
+  );
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cache) => {
+          if (cache !== CACHE_NAME) {
+            return caches.delete(cache);
+          }
+        })
+      );
     })
   );
 });
