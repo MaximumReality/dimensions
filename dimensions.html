@@ -464,67 +464,102 @@ function loop() {
     }
 
     // ─── Objects (reverse loop = safe removal) ───
-    for (let i = gameObjects.length - 1; i >= 0; i--) {
-      const obj = gameObjects[i];
-      obj.x -= gameSpeed;
+    // ─── Objects (reverse loop = safe removal) ───
+for (let i = gameObjects.length - 1; i >= 0; i--) {
+  const obj = gameObjects[i];
+  obj.x -= gameSpeed;
 
-      const nearPlayer = obj.x < 160 && obj.x > 80;
+  // Player hitbox (slightly smaller than visual sprite for better feel)
+  const player = {
+    x: 100,
+    y: floorY - 110 - jumpHeight,
+    width: 70,      // narrower than the 90px sprite → more forgiving
+    height: 100     // slightly shorter than 115px sprite
+  };
 
-      if (nearPlayer) {
-        if (obj.type === 'tech' && jumpHeight < 70) {
-          bonusCount = Math.min(bonusCount + 1, 10);
-          const points = 100 * bonusCount;
-          score += points;
-          dimensionHue += 5;
+  // Object hitbox (with adjustable padding/grace area)
+  const padding = 8; // smaller = stricter collision, larger = more forgiving
+  const objHitbox = {
+    x: obj.x + padding,
+    y: obj.y + padding,
+    width: obj.w - padding * 2,
+    height: obj.h - padding * 2
+  };
 
-          particles.push(new Particle(obj.x, obj.y, '#fff', `+${points}`));
-          for (let j = 0; j < 12; j++) {
-            particles.push(new Particle(obj.x, obj.y, `hsl(${dimensionHue},100%,60%)`));
-          }
-          gameObjects.splice(i, 1);
-          continue;
-        }
-        else if (obj.type === 'portal') {
-          flashScreen();
+  // Axis-Aligned Bounding Box (AABB) collision check
+  const isColliding =
+    player.x < objHitbox.x + objHitbox.width &&
+    player.x + player.width > objHitbox.x &&
+    player.y < objHitbox.y + objHitbox.height &&
+    player.y + player.height > objHitbox.y;
 
-          if (currentZone === 'CYBER') {
-            currentZone = 'SNACK';
-            gameSpeed = 7;
-          }
-          else if (currentZone === 'SNACK') {
-            currentZone = 'EARTHQUAKE';
-            gameSpeed = 12;
-            beastModeSfx.currentTime = 0;
-            beastModeSfx.play();
-            beastModePlayed = true;
-          }
-          else {
-            currentZone = 'CYBER';
-            gameSpeed = 7;
-            beastModePlayed = false;
-          }
+  if (isColliding) {
+    if (obj.type === 'tech') {
+      // Collect loot
+      bonusCount = Math.min(bonusCount + 1, 10);
+      const points = 100 * bonusCount;
+      score += points;
+      dimensionHue += 5;
 
-          bonusCount = 0;
-          portalActive = false;
-          gameObjects = [];
-          particles = [];
-          break; // exit loop after reset
-        }
-        else if (obj.type === 'obstacle' && jumpHeight < 70) {
-          triggerBSOD();
-        }
+      // Visual + sound feedback
+      particles.push(new Particle(obj.x + obj.w/2, obj.y + obj.h/2, '#fff', `+${points}`, 1.3));
+      for (let j = 0; j < 10; j++) {
+        particles.push(new Particle(
+          obj.x + obj.w/2,
+          obj.y + obj.h/2,
+          `hsl(${dimensionHue}, 100%, 65%)`,
+          null,
+          0.9
+        ));
       }
 
-      // Draw object
-      if (obj.img?.complete) {
-        ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+      gameObjects.splice(i, 1);
+      continue; // skip drawing & cleanup for this frame
+    } 
+    
+    else if (obj.type === 'portal') {
+      // Zone transition
+      flashScreen();
+
+      if (currentZone === 'CYBER') {
+        currentZone = 'SNACK';
+        gameSpeed = 7;
+      } else if (currentZone === 'SNACK') {
+        currentZone = 'EARTHQUAKE';
+        gameSpeed = 12;
+        beastModeSfx.currentTime = 0;
+        beastModeSfx.play();
+        beastModePlayed = true;
+      } else {
+        currentZone = 'CYBER';
+        gameSpeed = 7;
+        beastModePlayed = false;
       }
 
-      // Off-screen cleanup
-      if (obj.x < -150) {
-        gameObjects.splice(i, 1);
-      }
+      bonusCount = 0;
+      portalActive = false;
+      gameObjects = [];     // clear everything
+      particles = [];       // clear particles
+      break;                // important: exit loop after reset
+    } 
+    
+    else if (obj.type === 'obstacle') {
+      // Hit obstacle → game over
+      triggerBSOD();
+      // Note: we don't remove the obstacle here so player sees it on BSOD screen
     }
+  }
+
+  // Draw the object (if still alive)
+  if (obj.img?.complete) {
+    ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+  }
+
+  // Clean up objects that are way off-screen
+  if (obj.x < -150) {
+    gameObjects.splice(i, 1);
+  }
+}
 
     // UI update
     document.getElementById('score').innerText     = `DIMENSION: ${score}`;
