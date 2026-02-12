@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Maximum Reality: Dimensions</title>
+  <style>
+    body, html {
+      margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+      background:#000; -webkit-user-select:none; touch-action:none;
+      font-family: 'Courier New', monospace;
+    }
+    #gameCanvas {
+      display:block; width:100vw; height:100vh; background:#000;
+    }
+
+    .ui-layer {
+      position: absolute; top: env(safe-area-inset-top); left: 20px;
+      color: #0ff; z-index: 100; pointer-events: none;
+      text-shadow: 0 0 8px #0ff;
+    }
+    #score     { font-size: 24px; font-weight: bold; }
+    #highScore { font-size: 14px; opacity: 0.8; margin-top: 5px; }
+    #status    { font-size: 16px; margin-top: 8px; }
+    #invincible { font-size: 12px; opacity: 0.6; margin-top: 4px; color: #ff0; }
+
+    .controls {
+      position: absolute; top: calc(env(safe-area-inset-top) + 30px); right: 20px;
+      display: flex; gap: 15px; z-index: 150;
+    }
+    .btn {
+      font-size: 24px; background: rgba(0,255,255,0.15); border: 1.5px solid #0ff;
+      border-radius: 8px; padding: 8px 12px; color: #0ff; cursor: pointer;
+      backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center;
+      user-select: none; touch-action: manipulation;
+    }
+
+    #bsod {
+      position: fixed; inset: 0; background: #0000aa; color: #fff;
+      font-family: 'Courier New'; display: none; z-index: 200;
+      padding: 50px; box-sizing: border-box; text-align: center;
+    }
+
+    #flash {
+      position: fixed; inset: 0; background: #fff; opacity: 0; z-index: 250;
+      pointer-events: none; transition: opacity 0.1s;
+    }
+
+    #startOverlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7); color: #0ff;
+      z-index: 300; display: flex; align-items: center; justify-content: center;
+      font-size: 48px; text-shadow: 0 0 15px #0ff; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="bsod">
+  <h1>:(</h1>
+  <p>CRITICAL DIMENSION ERROR</p>
+  <p>REBOOTING SIMULATION...</p>
+</div>
+
+<div id="flash"></div>
+
+<div id="startOverlay">TAP TO START</div>
+
+<div class="controls">
+  <a href="https://maximumreality.xyz" class="btn">🏠</a>
+  <div id="muteBtn"  class="btn">🔊</div>
+  <div id="pauseBtn" class="btn">⏯️</div>
+</div>
+
+<div class="ui-layer">
+  <div id="score">DIMENSION: 0</div>
+  <div id="highScore">BEST: 0</div>
+  <div id="status">ZONE: CYBER</div>
+  <div id="invincible"></div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+// ──────────────────────────────────────────────────────────────
+//  CORE SETUP & VARIABLES
+// ──────────────────────────────────────────────────────────────
+
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+
+const bgMusic       = new Audio('password-infinity.mp3'); bgMusic.loop = true;
+const beastModeSfx  = new Audio('beast_mode.mp3');
+
+let isMuted         = false;
+let isPaused        = false;
+let gameState       = 'START'; // START | PLAYING | GAMEOVER
+let score           = 0;
+let highScore       = Number(localStorage.getItem('maxRealityHighScore')) || 0;
+let frame           = 0;
+let gameSpeed       = 4; // ← SLOWER START (was 7) for easier play
+let dimensionHue    = 0;
+let jumpHeight      = 0;
+let yVelocity       = 0;
+let shake           = 0;
+let bonusCount      = 0;
+let currentZone     = 'CYBER';
+let portalActive    = false;
+let beastModePlayed = false;
+let lastPortalScore = 0;
+let invincibleFrames = 0; // ← NEW: Invincibility timer (120 frames ≈ 2 sec)
+
+const gravity         = 1.2;
+const GROUND_Y_OFFSET = 100;
+let floorY;
+
+// ──────────────────────────────────────────────────────────────
+//  ASSETS & LOOT TABLES (unchanged, with pc added)
+// ──────────────────────────────────────────────────────────────
+
+const ASSETS = {
+  bg:             'gg-bg.png',
+  snackBg:        'hot-food-c-store-wp.JPG',
+  earthquakeBg:   'pompeii-bg.png',
+  floor:          'floor.png',
+  loriBlur:       'lori-blur.png',
+  portal:         'snack-portal.png',
+  pc:             'old-pc.png',
+  azul:           ['Azul-doll.png','Azul-doll2.png','Azul-doll3.png','Azul-doll4.png'],
+  buildings:      ['building-a.png','building-b.png','building-c.png'],
+};
+
+const CYBER_LOOT       = ['2tb.png','card.png','circuitpython.png','core-i7.png','core-i9.png','cpu-water-cooler.png','curve-keyboard.png','graphics-card.png','motherboard.png','optical-drive.png','power-supply.png','ram.png','ssd.png'];
+const SNACK_LOOT       = ['azulo_blueberry_vanilla.jpg','bread-slice.png','chips.png','hotdog.png','mochkil-burger.png','mochkil_puffs_orange.png','pink-donut.png','roast-chicken.png','soda.png','taco.png'];
+const EARTHQUAKE_LOOT  = ['book.png','scrolls.png','pottery.png','pottery2.png','pottery3.png','pottery4.png'];
+const EARTHQUAKE_OBSTACLES = ['herc-bust.png','rubble.png'];
+
+const imgCache = {
+  bg: null, snackBg: null, earthquakeBg: null, floor: null, loriBlur: null,
+  portal: null, pc: null, azul: [], buildings: [],
+  CYBER_LOOT: [], SNACK_LOOT: [], EARTHQUAKE_LOOT: [], EARTHQUAKE_OBSTACLES: []
+};
+
+// ──────────────────────────────────────────────────────────────
+//  PARTICLES (unchanged)
+// ──────────────────────────────────────────────────────────────
+
+let particles = [];
+class Particle {
+  constructor(x, y, color, text = null, sizeMod = 1) {
+    this.x = x; this.y = y;
+    this.char = text || (Math.random() > 0.5 ? "0" : "1");
+    this.size = (text ? 28 : Math.random() * 10 + 12) * sizeMod;
+    this.speedX = (Math.random() - 0.5) * 10;
+    this.speedY = (Math.random() - 0.5) * 10;
+    this.color = color; this.life = 1.0;
+  }
+  update() { this.x += this.speedX; this.y += this.speedY; this.life -= 0.02; }
+  draw() {
+    ctx.save();
+    ctx.fillStyle = this.color;
+    ctx.globalAlpha = this.life;
+    ctx.font = `bold ${this.size}px monospace`;
+    ctx.fillText(this.char, this.x, this.y);
+    ctx.restore();
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+//  LOAD ASSETS (unchanged)
+// ──────────────────────────────────────────────────────────────
+
+function loadAssets() {
+  ['bg','snackBg','earthquakeBg','floor','loriBlur','portal','pc'].forEach(key => {
+    const img = new Image();
+    img.src = ASSETS[key];
+    imgCache[key] = img; 
+  });
+  ASSETS.azul.forEach(src => { const img = new Image(); img.src = src; imgCache.azul.push(img); });
+  ASSETS.buildings.forEach(src => { const img = new Image(); img.src = src; imgCache.buildings.push(img); });
+  CYBER_LOOT.forEach(src => { const i = new Image(); i.src = src; imgCache.CYBER_LOOT.push(i); });
+  SNACK_LOOT.forEach(src => { const i = new Image(); i.src = src; imgCache.SNACK_LOOT.push(i); });
+  EARTHQUAKE_LOOT.forEach(src => { const i = new Image(); i.src = src; imgCache.EARTHQUAKE_LOOT.push(i); });
+  EARTHQUAKE_OBSTACLES.forEach(src => { const i = new Image(); i.src = src; imgCache.EARTHQUAKE_OBSTACLES.push(i); });
+}
+loadAssets();
+
+// ──────────────────────────────────────────────────────────────
+//  MATRIX RAIN & RESIZE (unchanged)
+// ──────────────────────────────────────────────────────────────
+
+let drops = [];
+function initMatrix() { drops = Array(Math.floor(canvas.width / 20)).fill(1); }
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  floorY = canvas.height - GROUND_Y_OFFSET;
+  initMatrix();
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ──────────────────────────────────────────────────────────────
+//  CONTROLS (unchanged + invincible UI)
+// ──────────────────────────────────────────────────────────────
+
+document.getElementById('muteBtn').addEventListener('touchstart', e => {
+  e.stopPropagation(); isMuted = !isMuted;
+  bgMusic.muted = isMuted; beastModeSfx.muted = isMuted;
+  document.getElementById('muteBtn').innerText = isMuted ? '🔇' : '🔊';
+}, {passive: false});
+
+document.getElementById('pauseBtn').addEventListener('touchstart', e => {
+  e.stopPropagation(); isPaused = !isPaused;
+  document.getElementById('pauseBtn').style.borderColor = isPaused ? '#ff0' : '#0ff';
+}, {passive: false});
+
+// ──────────────────────────────────────────────────────────────
+//  GAME STATE FUNCTIONS
+// ──────────────────────────────────────────────────────────────
+
+function triggerBSOD() {
+  gameState = 'GAMEOVER'; bgMusic.pause();
+  if (score > highScore) { highScore = score; localStorage.setItem('maxRealityHighScore', highScore); }
+  document.getElementById('bsod').style.display = 'block';
+  setTimeout(() => {
+    document.getElementById('bsod').style.display = 'none';
+    resetGame(); gameState = 'START';
+    document.getElementById('startOverlay').style.display = 'flex';
+  }, 2200);
+}
+
+function resetGame() {
+  score = 0; frame = 0; jumpHeight = 0; yVelocity = 0; shake = 0; bonusCount = 0;
+  gameObjects = []; portalActive = false; beastModePlayed = false; lastPortalScore = 0;
+  particles = []; currentZone = 'CYBER'; gameSpeed = 4; dimensionHue = 0; invincibleFrames = 0;
+}
+
+function flashScreen() {
+  const f = document.getElementById('flash'); f.style.opacity = 1;
+  setTimeout(() => f.style.opacity = 0, 100);
+}
+
+// ──────────────────────────────────────────────────────────────
+//  SPAWN LOGIC (SLOWER RATES)
+// ──────────────────────────────────────────────────────────────
+
+let gameObjects = [];
+
+function spawn() {
+  // PORTAL: Every 5000 pts (unchanged)
+  if (score >= 5000 && score - lastPortalScore >= 5000 && !portalActive) {
+    portalActive = true; lastPortalScore = score;
+    gameObjects.push({ x: canvas.width + 100, y: floorY - 140, w: 120, h: 140, type: 'portal', img: imgCache.portal });
+    return;
+  }
+
+  // LOOT: SLOWER (frame % 120, was 80)
+  let lootArr = currentZone === 'CYBER' ? imgCache.CYBER_LOOT :
+                currentZone === 'SNACK' ? imgCache.SNACK_LOOT : imgCache.EARTHQUAKE_LOOT;
+  if (frame % 120 === 0 && lootArr.length > 0) {
+    gameObjects.push({
+      x: canvas.width + 100, y: floorY - 85, w: 90, h: 90, type: 'tech', // ← WIDER for easier collect
+      img: lootArr[Math.floor(Math.random() * lootArr.length)]
+    });
+  }
+
+  // OBSTACLES: SLOWER (frame % 240 CYBER, %300 EARTHQUAKE, was 180/200)
+  if (frame % 240 === 0) {
+    let obsImg = null;
+    if (currentZone === 'CYBER') obsImg = imgCache.pc;
+    else if (currentZone === 'EARTHQUAKE') {
+      obsImg = imgCache.EARTHQUAKE_OBSTACLES[Math.floor(Math.random() * imgCache.EARTHQUAKE_OBSTACLES.length)];
+    }
+    if (obsImg) {
+      gameObjects.push({ x: canvas.width + 100, y: floorY - 90, w: 80, h: 90, type: 'obstacle', img: obsImg });
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+//  GLOW EFFECT FOR ASSETS
+// ──────────────────────────────────────────────────────────────
+
+function drawWithGlow(obj) {
+  ctx.save();
+  ctx.shadowColor = '#0ff'; // Cyan glow
+  ctx.shadowBlur = 20;      // Faint glow (adjust 15-25)
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+  ctx.restore();
+}
+
+// ──────────────────────────────────────────────────────────────
+//  BACKGROUND (unchanged)
+// ──────────────────────────────────────────────────────────────
+
+function drawBackground() {
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (currentZone === 'SNACK' && imgCache.snackBg?.complete) {
+    const x = -((frame * 2) % canvas.width);
+    ctx.drawImage(imgCache.snackBg, x, 0, canvas.width, canvas.height);
+    ctx.drawImage(imgCache.snackBg, x + canvas.width, 0, canvas.width, canvas.height);
+  } else if (currentZone === 'EARTHQUAKE' && imgCache.earthquakeBg?.complete) {
+    const x = -((frame * 1.5) % canvas.width);
+    ctx.drawImage(imgCache.earthquakeBg, x, 0, canvas.width, canvas.height);
+    ctx.drawImage(imgCache.earthquakeBg, x + canvas.width, 0, canvas.width, canvas.height);
+  } else { // CYBER
+    if (imgCache.bg?.complete) ctx.drawImage(imgCache.bg, 0, 0, canvas.width, canvas.height);
+    if (imgCache.loriBlur?.complete) {
+      ctx.save(); ctx.globalAlpha = 0.4;
+      const lX = -((frame * 0.5) % canvas.width);
+      ctx.drawImage(imgCache.loriBlur, lX, 0, canvas.width, canvas.height);
+      ctx.drawImage(imgCache.loriBlur, lX + canvas.width, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+    // Parallax buildings
+    const layers = [
+      {img: imgCache.buildings[2], speed: 0.8, opacity: 0.2, height: 550},
+      {img: imgCache.buildings[1], speed: 1.8, opacity: 0.4, height: 450},
+      {img: imgCache.buildings[0], speed: 3.5, opacity: 0.6, height: 350}
+    ];
+    layers.forEach(l => {
+      if (l.img?.complete) {
+        ctx.save(); const x = -((frame * l.speed) % canvas.width);
+        ctx.globalAlpha = l.opacity; ctx.filter = `hue-rotate(${dimensionHue}deg)`;
+        ctx.drawImage(l.img, x, floorY - l.height, canvas.width, l.height);
+        ctx.drawImage(l.img, x + canvas.width, floorY - l.height, canvas.width, l.height);
+        ctx.restore();
+      }
+    });
+    // Matrix rain
+    ctx.save(); ctx.fillStyle = `hsl(${dimensionHue}, 100%, 60%)`; ctx.font = "bold 18px monospace";
+    drops.forEach((y, i) => {
+      ctx.fillText(Math.random() > 0.5 ? "1" : "0", i * 20, y * 20);
+      if (y * 20 > canvas.height && Math.random() > 0.975) drops[i] = 0; drops[i]++;
+    });
+    ctx.restore();
+  }
+
+  // Ground
+  ctx.fillStyle = currentZone === 'EARTHQUAKE' ? '#440' : "#222";
+  ctx.fillRect(0, floorY, canvas.width, GROUND_Y_OFFSET);
+
+  if (imgCache.floor?.complete) {
+    const fX = -((frame * gameSpeed) % 100);
+    for (let i = -1; i < (canvas.width / 100) + 2; i++) {
+      ctx.drawImage(imgCache.floor, (i * 100) + fX, floorY, 100, GROUND_Y_OFFSET);
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+//  MAIN LOOP
+// ──────────────────────────────────────────────────────────────
+
+function loop() {
+  if (isPaused) { requestAnimationFrame(loop); return; }
+
+  ctx.save();
+  if (shake > 0) {
+    ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+    shake *= 0.88; if (shake < 0.2) shake = 0;
+  }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  drawBackground();
+
+  // Particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]; p.update(); p.draw();
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  if (gameState === 'PLAYING') {
+    frame++;
+    if (invincibleFrames > 0) invincibleFrames--; // ← Decrement invincibility
+
+    spawn();
+
+    // Physics
+    jumpHeight -= yVelocity; yVelocity += gravity;
+    let landed = false;
+    if (jumpHeight <= 0) {
+      jumpHeight = 0; if (yVelocity > 0) landed = true; yVelocity = 0;
+    }
+    if (currentZone === 'CYBER' && landed && beastModePlayed) shake = Math.max(shake, 5);
+    if (currentZone === 'EARTHQUAKE') shake = Math.max(shake, 15);
+
+    // Draw Azul
+    const animFrame = Math.floor(frame / 6) % 4;
+    if (imgCache.azul[animFrame]?.complete) {
+      ctx.drawImage(imgCache.azul[animFrame], 100, floorY - 110 - jumpHeight, 90, 115);
+    }
+
+    // ─── OBJECTS LOOP WITH AABB COLLISION + IMPROVEMENTS ───
+    for (let i = gameObjects.length - 1; i >= 0; i--) {
+      const obj = gameObjects[i]; obj.x -= gameSpeed;
+
+      // Player hitbox (forgiving)
+      const player = { x: 100, y: floorY - 110 - jumpHeight, width: 70, height: 100 };
+
+      // Object hitbox (with padding for forgiveness)
+      const padding = 12; // ← INCREASED for easier hits
+      const objHitbox = {
+        x: obj.x + padding, y: obj.y + padding,
+        width: obj.w - padding * 2, height: obj.h - padding * 2
+      };
+
+      let isColliding = 
+        player.x < objHitbox.x + objHitbox.width &&
+        player.x + player.width > objHitbox.x &&
+        player.y < objHitbox.y + objHitbox.height &&
+        player.y + player.height > objHitbox.y;
+
+      // SPECIAL PORTAL LOGIC: X-OVERLAP ONLY (can't jump over!)
+      if (obj.type === 'portal') {
+        const portalXOverlap = player.x + player.width > obj.x && player.x < obj.x + obj.w;
+        if (portalXOverlap && obj.x < 200) { // Near player → MUST ENTER
+          isColliding = true; // Force trigger regardless of Y/jump
+        } else {
+          isColliding = false; // Only x-check for portal
+        }
+      }
+
+      if (isColliding) {
+        if (obj.type === 'tech') {
+          // Collection: Bonus juice + particles
+          bonusCount = Math.min(bonusCount + 1, 10);
+          const points = 100 * bonusCount;
+          score += points; dimensionHue += 5;
+
+          // Enhanced particles from center
+          particles.push(new Particle(obj.x + obj.w/2, obj.y + obj.h/2, '#fff', `+${points}`, 1.4));
+          for (let j = 0; j < 15; j++) { // MORE particles
+            particles.push(new Particle(
+              obj.x + obj.w/2, obj.y + obj.h/2,
+              `hsl(${dimensionHue},100%,70%)`, null, 1.0
+            ));
+          }
+          gameObjects.splice(i, 1); continue;
+        } else if (obj.type === 'portal') {
+          // Portal: Flash + zone switch + INVINCIBILITY
+          flashScreen();
+          invincibleFrames = 180; // 3 sec invincibility ← NEW!
+
+          if (currentZone === 'CYBER') { currentZone = 'SNACK'; gameSpeed = 5; }
+          else if (currentZone === 'SNACK') {
+            currentZone = 'EARTHQUAKE'; gameSpeed = 8; // Slower than before (was 12)
+            beastModeSfx.currentTime = 0; beastModeSfx.play(); beastModePlayed = true;
+          } else { currentZone = 'CYBER'; gameSpeed = 4; beastModePlayed = false; }
+
+          bonusCount = 0; portalActive = false; gameObjects = []; particles = [];
+          break;
+        } else if (obj.type === 'obstacle') {
+          // Obstacle: Only kill if NOT invincible
+          if (invincibleFrames <= 0) {
+            flashScreen(); shake = 20; // Dramatic hit
+            triggerBSOD();
+          } else {
+            // Invincible: Destroy obstacle!
+            gameObjects.splice(i, 1); continue;
+          }
+        }
+      }
+
+      // Draw: GLOW for assets (tech + portal), normal for obstacles
+      if (obj.img?.complete) {
+        if (obj.type === 'tech' || obj.type === 'portal') {
+          drawWithGlow(obj);
+        } else {
+          ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+        }
+      }
+
+      // Cleanup
+      if (obj.x < -150) gameObjects.splice(i, 1);
+    }
+
+    // UI
+    document.getElementById('score').innerText = `DIMENSION: ${score}`;
+    document.getElementById('highScore').innerText = `BEST: ${highScore}`;
+    document.getElementById('status').innerText = `ZONE: ${currentZone}`;
+    document.getElementById('invincible').innerText = invincibleFrames > 0 ? `INVINCIBLE: ${Math.ceil(invincibleFrames/60)}s` : '';
+  }
+
+  ctx.restore(); requestAnimationFrame(loop);
+}
+
+// ──────────────────────────────────────────────────────────────
+//  INPUT (unchanged)
+// ──────────────────────────────────────────────────────────────
+
+window.addEventListener('touchstart', e => {
+  if (e.target.closest('.btn') || e.target.closest('#bsod')) return;
+  if (gameState === 'START') {
+    document.getElementById('startOverlay').style.display = 'none';
+    resetGame(); gameState = 'PLAYING'; bgMusic.play().catch(() => {});
+  } else if (gameState === 'PLAYING' && jumpHeight === 0) {
+    yVelocity = -22;
+  }
+  e.preventDefault();
+}, {passive: false});
+
+loop();
+</script>
+</body>
+</html>
