@@ -420,7 +420,7 @@ function loop() {
     // Draw Azul
     const animFrame = Math.floor(frame / 6) % 4;
     if (imgCache.azul[animFrame]?.complete) {
-      ctx.drawImage(imgCache.azul[animFrame], 100, floorY - 110 - jumpHeight, 90, 115);
+      ctx.drawImage(imgCache.azul[animFrame], 100, floorY - 165 - jumpHeight, 110, 170);
     }
 
     // ─── OBJECTS LOOP ───
@@ -428,7 +428,7 @@ function loop() {
       const obj = gameObjects[i]; 
       obj.x -= gameSpeed;
 
-      const player = { x: 100, y: floorY - 110 - jumpHeight, width: 50, height: 100 };
+      const player = { x: 115, y: floorY - 160 - jumpHeight, width: 60, height: 150 };
       const padding = 12; 
       const objHitbox = {
         x: obj.x + padding, y: obj.y + padding,
@@ -521,13 +521,14 @@ document.getElementById('easyModeBtn').addEventListener('touchstart', e => {
 
 // Your existing jump listener
 window.addEventListener('touchstart', e => {
-  if (gameState === 'PLAYING' && jumpHeight === 0) {
-    if (!e.target.closest('.btn')) {
-      yVelocity = -27;
-      e.preventDefault();
-    }
+  if (gameState === 'PLAYING' && jumpsUsed < 2) {
+    // Increase velocity from -18/-20 to -24 for a higher leap
+    yVelocity = -24; 
+    jumpsUsed++;
+    e.preventDefault();
   }
 }, {passive: false});
+
 
 loop();
   
