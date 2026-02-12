@@ -1,13 +1,17 @@
-const CACHE_NAME = 'max-reality-v4'; // bump version to force re-cache
+const CACHE_NAME = 'max-reality-v5'; // bump version to force re-cache
 
 const ASSETS = [
+  'Azul-doll.png',
+  'Azul-doll2.png',
+  'Azul-doll3.png',
+  'Azul-doll4.png',
   'index.html',
   'comfort.html',
   'manifest.json',
   'Banner-16.png',
   'Banner-32.png',
-  'Banner-40.png', // if still used
   'Banner-180.png',
+  'Banner.PNG',
   'password-infinity.mp3',
   'beast_mode.mp3',
   'old-pc.png',
