@@ -47,10 +47,21 @@
     }
 
     #startOverlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.7); color: #0ff;
-      z-index: 300; display: flex; align-items: center; justify-content: center;
-      font-size: 48px; text-shadow: 0 0 15px #0ff; pointer-events: none;
-    }
+  position: fixed; inset: 0; background: rgba(0,0,0,0.85); 
+  color: #0ff; z-index: 300; display: flex; 
+  align-items: center; justify-content: center;
+  pointer-events: auto !important;
+}
+
+#hardModeBtn { text-shadow: 0 0 10px #f0f; }
+#easyModeBtn { text-shadow: 0 0 10px #0ff; animation: pulse 1.5s infinite; }
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
   </style>
 </head>
 <body>
@@ -63,7 +74,17 @@
 
 <div id="flash"></div>
 
-<div id="startOverlay">TAP TO START</div>
+<div id="startOverlay">
+  <div style="text-align: center;">
+    <div style="font-size: 32px; margin-bottom: 30px;">COMFORT REALITY</div>
+    <div style="display: flex; gap: 20px; justify-content: center;">
+      <div id="hardModeBtn" class="btn" style="font-size: 20px; padding: 20px; border-color: #f0f; color: #f0f; pointer-events: auto;">CHAOS</div>
+      
+      <div id="easyModeBtn" class="btn" style="font-size: 20px; padding: 20px; border-color: #0ff; color: #0ff; pointer-events: auto;">COMFORT</div>
+    </div>
+  </div>
+</div>
+
 
 <div class="controls">
   <a href="https://maximumreality.xyz" class="btn">🏠</a>
@@ -376,7 +397,7 @@ function loop() {
 
   if (gameState === 'PLAYING') {
     frame++;
-    if (invincibleFrames > 0) invincibleFrames--; // ← Decrement invincibility
+    if (invincibleFrames > 0) invincibleFrames--; 
 
     spawn();
 
@@ -395,15 +416,13 @@ function loop() {
       ctx.drawImage(imgCache.azul[animFrame], 100, floorY - 110 - jumpHeight, 90, 115);
     }
 
-    // ─── OBJECTS LOOP WITH AABB COLLISION + IMPROVEMENTS ───
+    // ─── OBJECTS LOOP ───
     for (let i = gameObjects.length - 1; i >= 0; i--) {
-      const obj = gameObjects[i]; obj.x -= gameSpeed;
+      const obj = gameObjects[i]; 
+      obj.x -= gameSpeed;
 
-      // Player hitbox (forgiving)
       const player = { x: 100, y: floorY - 110 - jumpHeight, width: 70, height: 100 };
-
-      // Object hitbox (with padding for forgiveness)
-      const padding = 12; // ← INCREASED for easier hits
+      const padding = 12; 
       const objHitbox = {
         x: obj.x + padding, y: obj.y + padding,
         width: obj.w - padding * 2, height: obj.h - padding * 2
@@ -415,58 +434,42 @@ function loop() {
         player.y < objHitbox.y + objHitbox.height &&
         player.y + player.height > objHitbox.y;
 
-      // SPECIAL PORTAL LOGIC: X-OVERLAP ONLY (can't jump over!)
       if (obj.type === 'portal') {
         const portalXOverlap = player.x + player.width > obj.x && player.x < obj.x + obj.w;
-        if (portalXOverlap && obj.x < 200) { // Near player → MUST ENTER
-          isColliding = true; // Force trigger regardless of Y/jump
-        } else {
-          isColliding = false; // Only x-check for portal
-        }
+        if (portalXOverlap && obj.x < 200) isColliding = true;
       }
 
       if (isColliding) {
         if (obj.type === 'tech') {
-          // Collection: Bonus juice + particles
           bonusCount = Math.min(bonusCount + 1, 10);
           const points = 100 * bonusCount;
           score += points; dimensionHue += 5;
-
-          // Enhanced particles from center
           particles.push(new Particle(obj.x + obj.w/2, obj.y + obj.h/2, '#fff', `+${points}`, 1.4));
-          for (let j = 0; j < 15; j++) { // MORE particles
-            particles.push(new Particle(
-              obj.x + obj.w/2, obj.y + obj.h/2,
-              `hsl(${dimensionHue},100%,70%)`, null, 1.0
-            ));
-          }
-          gameObjects.splice(i, 1); continue;
+          gameObjects.splice(i, 1); 
+          continue; 
         } else if (obj.type === 'portal') {
-          // Portal: Flash + zone switch + INVINCIBILITY
           flashScreen();
-          invincibleFrames = 180; // 3 sec invincibility ← NEW!
-
+          invincibleFrames = 180; 
           if (currentZone === 'CYBER') { currentZone = 'SNACK'; gameSpeed = 5; }
           else if (currentZone === 'SNACK') {
-            currentZone = 'EARTHQUAKE'; gameSpeed = 8; // Slower than before (was 12)
+            currentZone = 'EARTHQUAKE'; gameSpeed = 8;
             beastModeSfx.currentTime = 0; beastModeSfx.play(); beastModePlayed = true;
           } else { currentZone = 'CYBER'; gameSpeed = 4; beastModePlayed = false; }
-
           bonusCount = 0; portalActive = false; gameObjects = []; particles = [];
-          break;
+          break; 
         } else if (obj.type === 'obstacle') {
-          // Obstacle: Only kill if NOT invincible
           if (invincibleFrames <= 0) {
-            flashScreen(); shake = 20; // Dramatic hit
+            flashScreen(); shake = 20;
             triggerBSOD();
           } else {
-            // Invincible: Destroy obstacle!
-            gameObjects.splice(i, 1); continue;
+            // Smash through it!
+            gameObjects.splice(i, 1); 
+            continue;
           }
         }
       }
 
-      // Draw: GLOW for assets (tech + portal), normal for obstacles
+      // Draw the objects
       if (obj.img?.complete) {
         if (obj.type === 'tech' || obj.type === 'portal') {
           drawWithGlow(obj);
@@ -475,33 +478,48 @@ function loop() {
         }
       }
 
-      // Cleanup
       if (obj.x < -150) gameObjects.splice(i, 1);
     }
 
-    // UI
+    // UI Updates
     document.getElementById('score').innerText = `DIMENSION: ${score}`;
     document.getElementById('highScore').innerText = `BEST: ${highScore}`;
     document.getElementById('status').innerText = `ZONE: ${currentZone}`;
     document.getElementById('invincible').innerText = invincibleFrames > 0 ? `INVINCIBLE: ${Math.ceil(invincibleFrames/60)}s` : '';
   }
 
-  ctx.restore(); requestAnimationFrame(loop);
+  ctx.restore(); 
+  requestAnimationFrame(loop);
 }
+
 
 // ──────────────────────────────────────────────────────────────
 //  INPUT (unchanged)
 // ──────────────────────────────────────────────────────────────
 
-window.addEventListener('touchstart', e => {
-  if (e.target.closest('.btn') || e.target.closest('#bsod')) return;
-  if (gameState === 'START') {
-    document.getElementById('startOverlay').style.display = 'none';
-    resetGame(); gameState = 'PLAYING'; bgMusic.play().catch(() => {});
-  } else if (gameState === 'PLAYING' && jumpHeight === 0) {
-    yVelocity = -22;
-  }
+document.getElementById('hardModeBtn').addEventListener('touchstart', e => {
   e.preventDefault();
+  // Redirect back to main Chaos page
+  window.location.href = 'index.html'; 
+}, {passive: false});
+
+document.getElementById('easyModeBtn').addEventListener('touchstart', e => {
+  e.preventDefault();
+  // Start the Comfort game
+  document.getElementById('startOverlay').style.display = 'none';
+  resetGame();
+  gameState = 'PLAYING';
+  bgMusic.play().catch(() => {});
+}, {passive: false});
+
+// Your existing jump listener
+window.addEventListener('touchstart', e => {
+  if (gameState === 'PLAYING' && jumpHeight === 0) {
+    if (!e.target.closest('.btn')) {
+      yVelocity = -22;
+      e.preventDefault();
+    }
+  }
 }, {passive: false});
 
 loop();
