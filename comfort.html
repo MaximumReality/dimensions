@@ -122,6 +122,7 @@ let gameSpeed       = 4; // ← SLOWER START (was 7) for easier play
 let dimensionHue    = 0;
 let jumpHeight      = 0;
 let yVelocity       = 0;
+let jumpsUsed       = 0;
 let shake           = 0;
 let bonusCount      = 0;
 let currentZone     = 'CYBER';
@@ -413,6 +414,7 @@ function loop() {
     let landed = false;
     if (jumpHeight <= 0) {
       jumpHeight = 0; if (yVelocity > 0) landed = true; yVelocity = 0;
+      jumpsUsed = 0;
     }
     if (currentZone === 'CYBER' && landed && beastModePlayed) shake = Math.max(shake, 5);
     if (currentZone === 'EARTHQUAKE') shake = Math.max(shake, 15);
@@ -429,11 +431,12 @@ function loop() {
       obj.x -= gameSpeed;
 
       const player = {
-  x: 50,
-  y: canvas.height - 160,
-  width: 120,
-  height: 180
+  x: 100, // Matches where Azul is drawn
+  y: floorY - 170 - jumpHeight, // Matches his jumping height
+  width: 110,
+  height: 170
 };
+
       const padding = 12; 
       const objHitbox = {
         x: obj.x + padding, y: obj.y + padding,
