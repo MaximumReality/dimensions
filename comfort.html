@@ -269,21 +269,32 @@ function flashScreen() {
 let gameObjects = [];
 
 function spawn() {
-  // 1. THE GATEKEEPER: Check the distance of the most recent object
+  // 1. THE GATEKEEPER
   const lastObj = gameObjects[gameObjects.length - 1];
-  
-  // If the last thing we spawned is still too close to the right edge, STOP here.
   if (lastObj && lastObj.x > canvas.width - 300) return; 
 
-  // 2. PORTAL SPAWNING (Priority)
+  // 2. PORTAL (Priority 1)
   if (score >= 5000 && score - lastPortalScore >= 5000 && !portalActive) {
     portalActive = true; 
     lastPortalScore = score;
     gameObjects.push({ x: canvas.width + 100, y: floorY - 140, w: 120, h: 140, type: 'portal', img: imgCache.portal });
-    return; // Stop here so we don't spawn loot on top of a portal
+    return;
   }
 
-  // 3. LOOT SPAWNING
+  // 3. OBSTACLES (Priority 2 - Check this BEFORE loot)
+  if (frame % 240 === 0) {
+    let obsImg = null;
+    if (currentZone === 'CYBER') obsImg = imgCache.pc;
+    else if (currentZone === 'EARTHQUAKE') {
+      obsImg = imgCache.EARTHQUAKE_OBSTACLES[Math.floor(Math.random() * imgCache.EARTHQUAKE_OBSTACLES.length)];
+    }
+    if (obsImg) {
+      gameObjects.push({ x: canvas.width + 100, y: floorY - 90, w: 80, h: 90, type: 'obstacle', img: obsImg });
+      return; 
+    }
+  }
+
+  // 4. LOOT (Priority 3)
   let lootArr = currentZone === 'CYBER' ? imgCache.CYBER_LOOT :
                 currentZone === 'SNACK' ? imgCache.SNACK_LOOT : imgCache.EARTHQUAKE_LOOT;
   
@@ -292,23 +303,8 @@ function spawn() {
       x: canvas.width + 100, y: floorY - 85, w: 90, h: 90, type: 'tech',
       img: lootArr[Math.floor(Math.random() * lootArr.length)]
     });
-    return; // Stop here so we don't spawn an obstacle on top of loot
-  }
-
-  // 4. OBSTACLE SPAWNING
-  if (frame % 240 === 0) {
-    let obsImg = null;
-    if (currentZone === 'CYBER') obsImg = imgCache.pc;
-    else if (currentZone === 'EARTHQUAKE') {
-      obsImg = imgCache.EARTHQUAKE_OBSTACLES[Math.floor(Math.random() * imgCache.EARTHQUAKE_OBSTACLES.length)];
-    }
-    
-    if (obsImg) {
-      gameObjects.push({ x: canvas.width + 100, y: floorY - 90, w: 80, h: 90, type: 'obstacle', img: obsImg });
-    }
   }
 }
-
 
 // ──────────────────────────────────────────────────────────────
 //  GLOW EFFECT FOR ASSETS
