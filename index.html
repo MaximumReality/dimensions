@@ -129,10 +129,12 @@ let score         = 0;
 let highScore     = Number(localStorage.getItem('maxRealityHighScore')) || 0;
 let frame         = 0;
 let gameSpeed     = 7;
-let dimensionHue  = 0;
-let jumpHeight    = 0;
-let yVelocity     = 0;
-let shake         = 0;
+let dimensionHue    = 0;
+let jumpHeight      = 0;
+let yVelocity       = 0;
+let jumpsUsed       = 0; // <--- Add this
+let shake           = 0;
+
 let bonusCount    = 0;
 let currentZone   = 'CYBER';
 let portalActive  = false;
@@ -477,13 +479,16 @@ function loop() {
     frame++;
     spawn();
 
-    // Player physics
+        // Player physics
     jumpHeight -= yVelocity;
     yVelocity += gravity;
     let landed = false;
     if (jumpHeight <= 0) {
       jumpHeight = 0;
-      if (yVelocity > 0) landed = true;
+      if (yVelocity > 0) {
+          landed = true;
+          jumpsUsed = 0; // <--- Reset jumps here
+      }
       yVelocity = 0;
     }
 
@@ -503,12 +508,13 @@ for (let i = gameObjects.length - 1; i >= 0; i--) {
   obj.x -= gameSpeed;
 
   // Player hitbox (slightly smaller than visual sprite for better feel)
-  const player = {
+    const player = {
     x: 100,
-    y: floorY - 110 - jumpHeight,
-    width: 70,      // narrower than the 90px sprite → more forgiving
-    height: 100     // slightly shorter than 115px sprite
+    y: floorY - 110 - jumpHeight, // This keeps the hitbox glued to Azul's feet
+    width: 70,      
+    height: 110     
   };
+
 
   // Object hitbox (with adjustable padding/grace area)
   const padding = 8; // smaller = stricter collision, larger = more forgiving
@@ -631,13 +637,16 @@ document.getElementById('easyModeBtn').addEventListener('touchstart', e => {
 
 // Keep the jump logic separate so it only works while playing
 window.addEventListener('touchstart', e => {
-  if (gameState === 'PLAYING' && jumpHeight === 0) {
+  // Check if playing and if we have jumps left (allows double jump)
+  if (gameState === 'PLAYING' && jumpsUsed < 2) {
     if (!e.target.closest('.btn')) {
-      yVelocity = -22;
+      yVelocity = -22; // The power of the jump
+      jumpsUsed++;     // Increment so we can't fly forever
       e.preventDefault();
     }
   }
 }, {passive: false});
+
 
 // Start loop
 loop();
