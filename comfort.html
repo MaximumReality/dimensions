@@ -428,7 +428,12 @@ function loop() {
       const obj = gameObjects[i]; 
       obj.x -= gameSpeed;
 
-      const player = { x: 115, y: floorY - 160 - jumpHeight, width: 60, height: 150 };
+      const player = {
+  x: 50,
+  y: canvas.height - 160,
+  width: 120,
+  height: 180
+};
       const padding = 12; 
       const objHitbox = {
         x: obj.x + padding, y: obj.y + padding,
