@@ -1,6 +1,5 @@
+const CACHE_NAME = 'max-reality-v2';
 
-const CACHE_NAME = 'max-reality-v1';
-// Add your filenames here so the phone knows what to save!
 const ASSETS = [
   'index.html',
   'comfort.html',
@@ -10,52 +9,62 @@ const ASSETS = [
   'beast_mode.mp3',
   'old-pc.png',
   'snack-portal.png',
-'rubble.png',
-'herc-bust.png',
-'2tb.png',
-'card.png',
-'circuitpython.png',
-'core-i7.png',
-'core-i9.png',
-'cpu-water-cooler.png',
-'curve-keyboard.png',
-'graphics-card.png',
-'motherboard.png',
-'optical-drive.png',
-'power-supply.png',
-'ram.png',
-'ssd.png',
-'azulo_blueberry_vanilla.jpg',
-'bread-slice.png',
-'chips.png',
-'hotdog.png',
-'mochkil-burger.png',
-'mochkil_puffs_orange.png',
-'pink-donut.png',
-'roast-chicken.png',
-'soda.png',
-'taco.png',
-'book.png',
-'pottery.png',
-'pottery2.png',
-'pottery3.png',
-'pottery4.png',
-'scrolls.png',
-  
-'hot-food-c-store-wp.JPG'
+  'floor.png',
+  'gg-bg.png',
+  'pompeii-bg.png',
+  'building-a.png',
+  'building-b.png',
+  'building-c.png',
+  'lori-blur.png',
+  'sw.js',
+  'rubble.png',
+  'herc-bust.png',
+  '2tb.png',
+  'card.png',
+  'circuitpython.png',
+  'core-i7.png',
+  'core-i9.png',
+  'cpu-water-cooler.png',
+  'curve-keyboard.png',
+  'graphics-card.png',
+  'motherboard.png',
+  'optical-drive.png',
+  'power-supply.png',
+  'ram.png',
+  'ssd.png',
+  'azulo_blueberry_vanilla.jpg',
+  'bread-slice.png',
+  'chips.png',
+  'hotdog.png',
+  'mochkil-burger.png',
+  'mochkil_puffs_orange.png',
+  'pink-donut.png',
+  'roast-chicken.png',
+  'soda.png',
+  'taco.png',
+  'book.png',
+  'pottery.png',
+  'pottery2.png',
+  'pottery3.png',
+  'pottery4.png',
+  'scrolls.png',
+  'hot-food-c-store-wp.JPG'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(ASSETS);
+    })
   );
 });
 
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((response) => {
-      return response || fetch(event.request).catch(err => {
+      return response || fetch(event.request).catch((err) => {
         console.log("Missing:", event.request.url);
+      });
     })
   );
 });
