@@ -1,4 +1,4 @@
-const CACHE_NAME = 'max-reality-v6'; // bump version to force re-cache
+const CACHE_NAME = 'max-reality-v6.1'; // bump version to force re-cache
 
 const ASSETS = [
   'Azul-doll.png',
